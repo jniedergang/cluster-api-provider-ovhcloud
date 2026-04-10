@@ -23,6 +23,7 @@ rules:
   - cluster.x-k8s.io
   resources:
   - clusters
+  - clusters/status
   - machines
   verbs:
   - get
@@ -32,12 +33,6 @@ rules:
   - infrastructure.cluster.x-k8s.io
   resources:
   - ovhclusters
-  verbs:
-  - get
-  - list
-- apiGroups:
-  - infrastructure.cluster.x-k8s.io
-  resources:
   - ovhmachines
   verbs:
   - create
@@ -50,12 +45,14 @@ rules:
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
+  - ovhclusters/finalizers
   - ovhmachines/finalizers
   verbs:
   - update
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
   resources:
+  - ovhclusters/status
   - ovhmachines/status
   verbs:
   - get

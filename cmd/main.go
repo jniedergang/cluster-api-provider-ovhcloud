@@ -101,7 +101,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TODO: Phase 4 - OVHCluster controller
+	err = (&controller.OVHClusterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(ctx, mgr)
+	if err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OVHCluster")
+		os.Exit(1)
+	}
 
 	err = mgr.AddHealthzCheck("healthz", healthz.Ping)
 	if err != nil {
