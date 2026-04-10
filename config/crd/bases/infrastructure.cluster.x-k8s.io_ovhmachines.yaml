@@ -130,7 +130,7 @@ spec:
                   type: object
                 type: array
               conditions:
-                description: Conditions defines current service state.
+                description: Conditions defines current service state of the OVH machine.
                 items:
                   description: Condition defines an observation of a Cluster API resource
                     operational state.

@@ -106,8 +106,9 @@ type OVHMachineStatus struct {
 	// Ready is true when the provider resource is ready.
 	Ready bool `json:"ready,omitempty"`
 
-	// Conditions defines current service state.
-	Conditions []clusterv1.Condition `json:"conditions,omitempty"`
+	// Conditions defines current service state of the OVH machine.
+	// +optional
+	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
 
 	// FailureReason is the short name for the reason why a failure might be happening.
 	// +optional
