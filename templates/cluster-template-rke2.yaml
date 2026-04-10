@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${NAMESPACE}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${CLUSTER_NAME}
+spec:
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+    kind: RKE2ControlPlane
+    name: ${CLUSTER_NAME}-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: OVHCluster
+    name: ${CLUSTER_NAME}-ovh
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: OVHCluster
+metadata:
+  name: ${CLUSTER_NAME}-ovh
+  namespace: ${NAMESPACE}
+spec:
+  serviceName: ${OVH_SERVICE_NAME}
+  region: ${OVH_REGION}
+  identitySecret:
+    namespace: ${NAMESPACE}
+    name: ovh-identity-secret
+  loadBalancerConfig:
+    subnetID: ${OVH_SUBNET_ID}
+  networkConfig:
+    privateNetworkID: ${OVH_NETWORK_ID}
+    subnetCIDR: ${OVH_SUBNET_CIDR}
+  sshKeyName: ${OVH_SSH_KEY}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: ${NAMESPACE}
+  name: ovh-identity-secret
+type: Opaque
+data:
+  endpoint: ${OVH_ENDPOINT_B64}
+  applicationKey: ${OVH_APPLICATION_KEY_B64}
+  applicationSecret: ${OVH_APPLICATION_SECRET_B64}
+  consumerKey: ${OVH_CONSUMER_KEY_B64}
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+kind: RKE2ControlPlane
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${CLUSTER_NAME}-control-plane
+spec:
+  replicas: ${CONTROL_PLANE_MACHINE_COUNT}
+  agentConfig:
+    version: ${KUBERNETES_VERSION}+rke2r1
+  serverConfig:
+    cni: calico
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    kind: OVHMachineTemplate
+    name: ${CLUSTER_NAME}-cp-machine
+    namespace: ${NAMESPACE}
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+kind: RKE2ConfigTemplate
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${CLUSTER_NAME}-worker
+spec:
+  template:
+    spec:
+      agentConfig:
+        version: ${KUBERNETES_VERSION}+rke2r1
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: OVHMachineTemplate
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${CLUSTER_NAME}-cp-machine
+spec:
+  template:
+    spec:
+      flavorName: ${OVH_FLAVOR_CP}
+      imageName: ${OVH_IMAGE}
+      sshKeyName: ${OVH_SSH_KEY}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+kind: OVHMachineTemplate
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${CLUSTER_NAME}-worker-machine
+spec:
+  template:
+    spec:
+      flavorName: ${OVH_FLAVOR_WORKER}
+      imageName: ${OVH_IMAGE}
+      sshKeyName: ${OVH_SSH_KEY}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${CLUSTER_NAME}-workers
+spec:
+  clusterName: ${CLUSTER_NAME}
+  replicas: ${WORKER_MACHINE_COUNT}
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+  template:
+    spec:
+      clusterName: ${CLUSTER_NAME}
+      version: ${KUBERNETES_VERSION}
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+          kind: RKE2ConfigTemplate
+          name: ${CLUSTER_NAME}-worker
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: OVHMachineTemplate
+        name: ${CLUSTER_NAME}-worker-machine
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineHealthCheck
+metadata:
+  namespace: ${NAMESPACE}
+  name: ${CLUSTER_NAME}-mhc
+spec:
+  clusterName: ${CLUSTER_NAME}
+  maxUnhealthy: 34%
+  nodeStartupTimeout: 20m
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
+  unhealthyConditions:
+  - type: Ready
+    status: "False"
+    timeout: 5m
+  - type: Ready
+    status: Unknown
+    timeout: 5m
