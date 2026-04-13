@@ -113,7 +113,7 @@ jobs:
       - name: Generate release manifests
         run: |
           make kustomize controller-gen
-          make release-manifests RELEASE_TAG=${{ env.TAG }}
+          make release-manifests RELEASE_TAG=${{ env.TAG }} ORG=${{ env.ORG }}
 
       - name: Create GitHub Release
         env:

@@ -204,6 +204,9 @@ $(RELEASE_DIR):
 .PHONY: release-manifests
 release-manifests: $(RELEASE_DIR) $(KUSTOMIZE) ## Build the manifests to publish with a release.
 	$(KUSTOMIZE) build config/default > $(RELEASE_DIR)/infrastructure-components.yaml
+	# Pin the image to the release tag (defaults to :dev for non-release builds).
+	# The raw bundle is meant for users who don't override via Helm values.
+	sed -i 's|image: ghcr.io/rancher-sandbox/cluster-api-provider-ovhcloud:dev|image: $(IMG):$(or $(RELEASE_TAG),dev)|g' $(RELEASE_DIR)/infrastructure-components.yaml
 	cp metadata.yaml $(RELEASE_DIR)/metadata.yaml
 	cp templates/cluster-template-rke2.yaml $(RELEASE_DIR)/cluster-template.yaml
 	@for f in cluster-template-rke2-floatingip cluster-template-kubeadm; do \

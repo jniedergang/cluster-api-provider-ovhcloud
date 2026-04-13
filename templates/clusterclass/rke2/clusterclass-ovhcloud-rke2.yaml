@@ -14,7 +14,7 @@ metadata:
 spec:
   controlPlane:
     ref:
-      apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+      apiVersion: controlplane.cluster.x-k8s.io/v1beta1
       kind: RKE2ControlPlaneTemplate
       name: ovhcloud-rke2-control-plane
     machineInfrastructure:
@@ -33,7 +33,7 @@ spec:
         template:
           bootstrap:
             ref:
-              apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+              apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
               kind: RKE2ConfigTemplate
               name: ovhcloud-rke2-worker
           infrastructure:
@@ -231,23 +231,27 @@ spec:
       imageName: PLACEHOLDER
       sshKeyName: PLACEHOLDER
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
 kind: RKE2ControlPlaneTemplate
 metadata:
   name: ovhcloud-rke2-control-plane
 spec:
   template:
     spec:
-      agentConfig:
-        version: ""  # set by Cluster.spec.topology.version
+      version: ""  # set by Cluster.spec.topology.version
       serverConfig:
         cni: calico
-      infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
-        kind: OVHMachineTemplate
-        name: ovhcloud-rke2-control-plane
+      rolloutStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxSurge: 1
+      machineTemplate:
+        infrastructureRef:
+          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+          kind: OVHMachineTemplate
+          name: ovhcloud-rke2-control-plane
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
 kind: RKE2ConfigTemplate
 metadata:
   name: ovhcloud-rke2-worker
