@@ -49,7 +49,7 @@ helm install capiovh \
 ### Install (manifest)
 
 ```bash
-kubectl apply -f https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/v0.1.0/infrastructure-components.yaml
+kubectl apply -f https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/v0.1.1/infrastructure-components.yaml
 ```
 
 ### Provision a cluster
@@ -68,7 +68,7 @@ export OVH_SERVICE_NAME=<project-id>
 export OVH_REGION=EU-WEST-PAR
 export OVH_SSH_KEY=my-key
 clusterctl generate cluster mycluster \
-  --from https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/v0.1.0/cluster-template-kubeadm.yaml \
+  --from https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/v0.1.1/cluster-template-kubeadm.yaml \
   --kubernetes-version v1.31.0 \
   --target-namespace demo | kubectl apply -f -
 ```

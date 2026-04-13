@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.1.1] - 2026-04-13
+
+### Fixed
+
+- **Helm chart**: bundled CRDs now carry the CAPI provider labels
+  (`cluster.x-k8s.io/provider=infrastructure-ovhcloud`,
+  `cluster.x-k8s.io/v1beta1=v1alpha1`). Without these, CAPI core did not
+  discover the provider after `helm install` and `OVHCluster` never got
+  an `OwnerRef` from the Cluster controller, hanging reconciliation in
+  "Waiting for Cluster Controller". Users on v0.1.0 should upgrade.
+- **E2E test suite**: the idempotency suite applied a standalone
+  `OVHCluster` with no parent `Cluster`, which could not progress even
+  with a correctly-labelled chart. It now wraps the resource in a
+  `Cluster` + credential `Secret` like the lifecycle suite.
+
 ## [v0.1.0] - 2026-04-13
 
 Initial release.
@@ -57,5 +72,6 @@ Initial release.
 - Webhook validation deployed via cert-manager on RKE2 management cluster
 - Helm chart install with webhooks enabled
 
-[Unreleased]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/compare/v0.1.1...HEAD
+[v0.1.1]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.1.1
 [v0.1.0]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.1.0
