@@ -130,6 +130,10 @@ spec:
               valueFrom:
                 variable: identitySecretName
             - op: add
+              path: /spec/template/spec/identitySecret/namespace
+              valueFrom:
+                template: "{{ .builtin.cluster.namespace }}"
+            - op: add
               path: /spec/template/spec/networkConfig/subnetCIDR
               valueFrom:
                 variable: subnetCIDR
@@ -202,7 +206,7 @@ spec:
       serviceName: PLACEHOLDER  # patched
       region: PLACEHOLDER       # patched
       identitySecret:
-        namespace: ${NAMESPACE}
+        namespace: PLACEHOLDER  # patched (= cluster namespace via builtin)
         name: PLACEHOLDER       # patched
       loadBalancerConfig: {}    # patched
       networkConfig:
