@@ -4,11 +4,18 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (must already exist)"
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: cluster-api-provider-ovhcloud
-  TAG: ${{ github.ref_name }}
+  # Use the workflow_dispatch input if present, otherwise the pushed tag.
+  TAG: ${{ inputs.tag || github.ref_name }}
   ORG: ${{ github.repository_owner }}
 
 jobs:
@@ -23,6 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.TAG }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -66,6 +74,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -75,9 +85,9 @@ jobs:
 
       - name: Package and push Helm chart
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ env.TAG }}"
           VERSION="${VERSION#v}"  # strip leading v
-          helm package chart/cluster-api-provider-ovhcloud --version "${VERSION}" --app-version "${{ github.ref_name }}"
+          helm package chart/cluster-api-provider-ovhcloud --version "${VERSION}" --app-version "${{ env.TAG }}"
           helm push "cluster-api-provider-ovhcloud-${VERSION}.tgz" "oci://${{ env.REGISTRY }}/${{ env.ORG }}/charts"
 
   release:
@@ -91,6 +101,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.TAG }}
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -104,13 +115,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view ${{ github.ref_name }} > /dev/null 2>&1; then
-            echo "${{ github.ref_name }} release exists"
+          if gh release view ${{ env.TAG }} > /dev/null 2>&1; then
+            echo "${{ env.TAG }} release exists"
           else
-            gh release create ${{ github.ref_name }} --generate-notes
+            gh release create ${{ env.TAG }} --generate-notes
           fi
-          for f in metadata.yaml infrastructure-components.yaml cluster-template.yaml cluster-template-kubeadm.yaml clusterclass-ovhcloud-rke2.yaml; do
+          for f in metadata.yaml infrastructure-components.yaml cluster-template.yaml cluster-template-kubeadm.yaml cluster-template-rke2-floatingip.yaml clusterclass-ovhcloud-rke2.yaml; do
             if [ -f "out/${f}" ]; then
-              gh release upload ${{ github.ref_name }} "out/${f}" --clobber
+              gh release upload ${{ env.TAG }} "out/${f}" --clobber
             fi
           done
