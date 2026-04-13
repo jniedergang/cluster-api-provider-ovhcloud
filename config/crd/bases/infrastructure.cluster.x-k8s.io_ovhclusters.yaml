@@ -132,11 +132,10 @@ spec:
                       type: object
                     type: array
                   subnetID:
-                    description: SubnetID is the private subnet to attach the load
-                      balancer to.
+                    description: |-
+                      SubnetID is the private subnet to attach the load balancer to.
+                      If empty, the controller uses the subnet it created via NetworkConfig.
                     type: string
-                required:
-                - subnetID
                 type: object
               networkConfig:
                 description: NetworkConfig describes the private network configuration

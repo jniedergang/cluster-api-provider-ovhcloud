@@ -7,5 +7,6 @@ spec:
   template:
     spec:
       containers:
-      - image: gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud-amd64:dev
+      - image: localhost/capiovh:dev-00265a2
+        imagePullPolicy: IfNotPresent
         name: manager

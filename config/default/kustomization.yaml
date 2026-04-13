@@ -3,6 +3,7 @@ namespace: capiovh-system
 namePrefix: capiovh-
 
 resources:
+- namespace.yaml
 - ../crd
 - ../rbac
 - ../manager

@@ -103,19 +103,37 @@ func TestValidateOVHCluster_MissingIdentitySecret(t *testing.T) {
 	}
 }
 
-func TestValidateOVHCluster_MissingSubnetID(t *testing.T) {
+func TestValidateOVHCluster_MissingSubnetAndNetwork(t *testing.T) {
 	c := validOVHCluster()
 	c.Spec.LoadBalancerConfig.SubnetID = ""
+	c.Spec.NetworkConfig = nil
 
 	v := &OVHClusterValidator{}
 
 	_, err := v.ValidateCreate(context.Background(), c)
 	if err == nil {
-		t.Fatal("expected error for missing subnetID")
+		t.Fatal("expected error when neither subnetID nor networkConfig is provided")
 	}
 
-	if !strings.Contains(err.Error(), "spec.loadBalancerConfig.subnetID is required") {
-		t.Errorf("expected subnetID error, got: %v", err)
+	if !strings.Contains(err.Error(), "either spec.loadBalancerConfig.subnetID or spec.networkConfig must be provided") {
+		t.Errorf("expected subnet/network error, got: %v", err)
+	}
+}
+
+func TestValidateOVHCluster_OnlyNetworkConfig(t *testing.T) {
+	// Subnet ID may be empty if NetworkConfig provides the subnetCIDR
+	// (the controller will create the subnet itself).
+	c := validOVHCluster()
+	c.Spec.LoadBalancerConfig.SubnetID = ""
+	c.Spec.NetworkConfig = &OVHNetworkConfig{
+		SubnetCIDR: "10.0.0.0/24",
+	}
+
+	v := &OVHClusterValidator{}
+
+	_, err := v.ValidateCreate(context.Background(), c)
+	if err != nil {
+		t.Errorf("expected valid cluster (controller-managed subnet), got error: %v", err)
 	}
 }
 

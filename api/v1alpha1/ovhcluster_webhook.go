@@ -88,8 +88,10 @@ func validateOVHCluster(c *OVHCluster) (admission.Warnings, error) {
 		errs = append(errs, "spec.identitySecret.namespace is required")
 	}
 
-	if c.Spec.LoadBalancerConfig.SubnetID == "" {
-		errs = append(errs, "spec.loadBalancerConfig.subnetID is required")
+	// SubnetID is optional: the controller creates a subnet via NetworkConfig if unset.
+	// Validate that at least one of subnetID or networkConfig is provided.
+	if c.Spec.LoadBalancerConfig.SubnetID == "" && c.Spec.NetworkConfig == nil {
+		errs = append(errs, "either spec.loadBalancerConfig.subnetID or spec.networkConfig must be provided")
 	}
 
 	if c.Spec.NetworkConfig != nil {

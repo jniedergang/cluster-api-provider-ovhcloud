@@ -85,7 +85,9 @@ type SecretKey struct {
 // OVHLoadBalancerConfig describes the OVH managed load balancer configuration.
 type OVHLoadBalancerConfig struct {
 	// SubnetID is the private subnet to attach the load balancer to.
-	SubnetID string `json:"subnetID"`
+	// If empty, the controller uses the subnet it created via NetworkConfig.
+	// +optional
+	SubnetID string `json:"subnetID,omitempty"`
 
 	// FlavorName is the OVH Octavia LB flavor name (small, medium, large, xl).
 	// Defaults to "small" if not specified.

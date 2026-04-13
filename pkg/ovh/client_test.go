@@ -133,24 +133,35 @@ func TestNewClientFromSecret_MissingKeys(t *testing.T) {
 }
 
 func TestValidateCredentials(t *testing.T) {
+	expectedPath := fmt.Sprintf("/cloud/project/%s/region", testServiceName)
+
 	_, client := newTestServer(t, map[string]http.HandlerFunc{
-		"GET /me": func(w http.ResponseWriter, r *http.Request) {
-			jsonResponse(w, http.StatusOK, Me{
-				Nichandle: "ab12345-ovh",
-				FirstName: "Test",
-				Name:      "User",
-				Email:     "test@example.com",
-			})
+		"GET " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
+			jsonResponse(w, http.StatusOK, []string{"EU-WEST-PAR", "GRA9"})
 		},
 	})
 
-	me, err := client.ValidateCredentials()
-	if err != nil {
+	if err := client.ValidateCredentials(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
 
-	if me.Nichandle != "ab12345-ovh" {
-		t.Errorf("expected nichandle ab12345-ovh, got %s", me.Nichandle)
+func TestValidateCredentials_NoRegions(t *testing.T) {
+	expectedPath := fmt.Sprintf("/cloud/project/%s/region", testServiceName)
+
+	_, client := newTestServer(t, map[string]http.HandlerFunc{
+		"GET " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
+			jsonResponse(w, http.StatusOK, []string{})
+		},
+	})
+
+	err := client.ValidateCredentials()
+	if err == nil {
+		t.Fatal("expected error when no regions returned")
+	}
+
+	if !strings.Contains(err.Error(), "no regions") {
+		t.Errorf("expected 'no regions' error, got: %v", err)
 	}
 }
 
@@ -542,27 +553,31 @@ func TestGetLBFlavorByName_NotFound(t *testing.T) {
 }
 
 func TestCreateLoadBalancer(t *testing.T) {
-	// OVH POST returns an async task descriptor (just an id), then the client
-	// must list LBs by name to find the actual LB. The test must mock both calls.
+	// Flow: GET (idempotency check, no LB found) -> POST -> GET (poll until LB found).
 	expectedPath := fmt.Sprintf("/cloud/project/%s/region/%s/loadbalancing/loadbalancer",
 		testServiceName, testRegion)
 
 	postCalled := false
-	listCalled := false
+	getCallCount := 0
 
 	_, client := newTestServer(t, map[string]http.HandlerFunc{
 		"POST " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
 			postCalled = true
-
-			// OVH returns a task id, not the LB id
 			jsonResponse(w, http.StatusOK, map[string]interface{}{
 				"id":     "task-xyz-123",
 				"status": "in-progress",
 			})
 		},
 		"GET " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
-			listCalled = true
+			getCallCount++
 
+			// First call (idempotency check): empty list, force POST
+			if getCallCount == 1 {
+				jsonResponse(w, http.StatusOK, []LoadBalancer{})
+				return
+			}
+
+			// Subsequent calls (post-POST poll): return the LB
 			jsonResponse(w, http.StatusOK, []LoadBalancer{
 				{
 					ID:                 "lb-real-456",
@@ -580,10 +595,7 @@ func TestCreateLoadBalancer(t *testing.T) {
 		FlavorID: "fl-small",
 		Network: LBNetworkConfig{
 			Private: LBPrivateNetwork{
-				Network: LBNetworkRef{
-					ID:       "openstack-uuid",
-					SubnetID: "subnet-1",
-				},
+				Network: LBNetworkRef{ID: "openstack-uuid", SubnetID: "subnet-1"},
 			},
 		},
 	})
@@ -592,19 +604,60 @@ func TestCreateLoadBalancer(t *testing.T) {
 	}
 
 	if !postCalled {
-		t.Error("expected POST to be called")
+		t.Error("expected POST to be called when no LB exists")
 	}
 
-	if !listCalled {
-		t.Error("expected list LBs to be called after POST (to find real LB id)")
+	if getCallCount < 2 {
+		t.Errorf("expected at least 2 GETs (idempotency + poll), got %d", getCallCount)
 	}
 
 	if lb.ID != "lb-real-456" {
 		t.Errorf("expected LB id from list, got %s", lb.ID)
 	}
+}
 
-	if lb.VIPAddress != "10.0.0.100" {
-		t.Errorf("expected VIP 10.0.0.100, got %s", lb.VIPAddress)
+func TestCreateLoadBalancer_Idempotent(t *testing.T) {
+	// If an LB with the same name already exists, CreateLoadBalancer must
+	// return it without POSTing (idempotent).
+	expectedPath := fmt.Sprintf("/cloud/project/%s/region/%s/loadbalancing/loadbalancer",
+		testServiceName, testRegion)
+
+	postCalled := false
+
+	_, client := newTestServer(t, map[string]http.HandlerFunc{
+		"POST " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
+			postCalled = true
+			t.Error("POST must not be called when LB already exists")
+		},
+		"GET " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
+			jsonResponse(w, http.StatusOK, []LoadBalancer{
+				{
+					ID:                 "lb-existing",
+					Name:               "capi-lb",
+					ProvisioningStatus: LBProvisioningStatusActive,
+					VIPAddress:         "10.0.0.100",
+				},
+			})
+		},
+	})
+
+	lb, err := client.CreateLoadBalancer(CreateLoadBalancerOpts{
+		Name:     "capi-lb",
+		FlavorID: "fl-small",
+		Network: LBNetworkConfig{
+			Private: LBPrivateNetwork{Network: LBNetworkRef{ID: "openstack-uuid", SubnetID: "subnet-1"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if postCalled {
+		t.Error("idempotency violated: POST was called even though LB exists")
+	}
+
+	if lb.ID != "lb-existing" {
+		t.Errorf("expected existing LB, got %s", lb.ID)
 	}
 }
 

@@ -128,18 +128,29 @@ func (c *Client) retryWithBackoff(operation string, fn func() error) error {
 
 // --- Credential Validation ---
 
-// ValidateCredentials tests the OVH API connection by calling GET /me.
-func (c *Client) ValidateCredentials() (*Me, error) {
-	var me Me
-
-	err := c.retryWithBackoff("ValidateCredentials", func() error {
-		return c.api.Get("/me", &me)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("validating OVH credentials: %w", err)
+// ValidateCredentials tests the OVH API connection and credentials scope by
+// calling a project-scoped read-only endpoint (region listing). This works
+// even with narrowly scoped Consumer Keys that do not have access to /me
+// (the typical CAPIOVH deployment uses CKs scoped to /cloud/project/{sn}/*).
+func (c *Client) ValidateCredentials() error {
+	if c.serviceName == "" {
+		return fmt.Errorf("serviceName is empty")
 	}
 
-	return &me, nil
+	var regions []string
+
+	err := c.retryWithBackoff("ValidateCredentials", func() error {
+		return c.api.Get(c.projectPath("/region"), &regions)
+	})
+	if err != nil {
+		return fmt.Errorf("validating OVH credentials: %w", err)
+	}
+
+	if len(regions) == 0 {
+		return fmt.Errorf("validating OVH credentials: no regions returned by project")
+	}
+
+	return nil
 }
 
 // --- Instance Operations ---
@@ -578,13 +589,22 @@ func (c *Client) GetLBFlavorByName(name string) (*LBFlavor, error) {
 	return nil, fmt.Errorf("LB flavor %q not found in region %s", name, c.region)
 }
 
-// CreateLoadBalancer creates a new managed load balancer (Octavia).
+// CreateLoadBalancer creates a managed load balancer (Octavia), or returns
+// the existing one if one with the same name already exists in the region.
 //
-// Note: the OVH POST returns an asynchronous task descriptor, not the actual
-// load balancer object. The "id" field in the response is a TASK id, not the
-// LB id. After POST we list LBs by name to find the real LB. The caller can
-// then poll GetLoadBalancer until ProvisioningStatus == "ACTIVE".
+// Idempotency: a POST may succeed but the controller restart (or a slow API
+// response) may leave us without the ID. To avoid creating duplicate LBs we
+// first list LBs by name; only if not found do we POST.
+//
+// OVH async behavior: the POST returns a task descriptor, not the LB. After
+// POST we poll list-by-name with backoff until the LB appears (typically 2-15
+// seconds).
 func (c *Client) CreateLoadBalancer(opts CreateLoadBalancerOpts) (*LoadBalancer, error) {
+	// Idempotency: skip POST if an LB with this name already exists
+	if existing, err := c.findLoadBalancerByName(opts.Name); err == nil && existing != nil {
+		return existing, nil
+	}
+
 	var taskResp map[string]interface{}
 
 	err := c.retryWithBackoff("CreateLoadBalancer", func() error {
@@ -594,17 +614,24 @@ func (c *Client) CreateLoadBalancer(opts CreateLoadBalancerOpts) (*LoadBalancer,
 		return nil, fmt.Errorf("creating load balancer %q: %w", opts.Name, err)
 	}
 
-	// Find the real LB by name (POST returned a task id, not the LB id)
-	lb, err := c.findLoadBalancerByName(opts.Name)
-	if err != nil {
-		return nil, fmt.Errorf("LB %q created but lookup failed: %w", opts.Name, err)
+	// Poll list-by-name with backoff: the LB may take several seconds to
+	// appear after POST returns the task descriptor.
+	const maxLookupAttempts = 10
+
+	for attempt := 0; attempt < maxLookupAttempts; attempt++ {
+		lb, err := c.findLoadBalancerByName(opts.Name)
+		if err != nil {
+			return nil, fmt.Errorf("LB %q created but lookup failed: %w", opts.Name, err)
+		}
+
+		if lb != nil {
+			return lb, nil
+		}
+
+		time.Sleep(time.Duration(2*(attempt+1)) * time.Second)
 	}
 
-	if lb == nil {
-		return nil, fmt.Errorf("LB %q was created but cannot be found by name", opts.Name)
-	}
-
-	return lb, nil
+	return nil, fmt.Errorf("LB %q was created but did not appear in list within %d attempts", opts.Name, maxLookupAttempts)
 }
 
 // findLoadBalancerByName lists LBs in the region and returns the first matching name.

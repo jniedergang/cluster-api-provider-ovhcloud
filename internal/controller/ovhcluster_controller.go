@@ -265,6 +265,12 @@ func (r *OVHClusterReconciler) ReconcileNormal(scope *ClusterScope) (reconcile.R
 
 	// Step 2: Reconcile network (private network + subnet)
 	if err := r.reconcileNetwork(scope); err != nil {
+		// Network not yet ACTIVE in region: requeue without surfacing as error
+		// (the LB step would fail anyway without subnet).
+		if err == errNetworkNotReady {
+			return ctrl.Result{RequeueAfter: requeueTimeShort}, nil
+		}
+
 		return ctrl.Result{RequeueAfter: requeueTimeShort}, err
 	}
 
@@ -286,8 +292,7 @@ func (r *OVHClusterReconciler) ReconcileNormal(scope *ClusterScope) (reconcile.R
 
 // reconcileCredentials validates the OVH API connection.
 func (r *OVHClusterReconciler) reconcileCredentials(scope *ClusterScope) error {
-	me, err := scope.OVHClient.ValidateCredentials()
-	if err != nil {
+	if err := scope.OVHClient.ValidateCredentials(); err != nil {
 		conditions.MarkFalse(scope.OVHCluster, infrav1.OVHConnectionReadyCondition,
 			infrav1.OVHAuthenticationFailedReason, clusterv1.ConditionSeverityError,
 			"Failed to validate OVH credentials: %s", err.Error())
@@ -295,7 +300,7 @@ func (r *OVHClusterReconciler) reconcileCredentials(scope *ClusterScope) error {
 		return fmt.Errorf("validating OVH credentials: %w", err)
 	}
 
-	scope.Logger.V(1).Info("OVH credentials validated", "nichandle", me.Nichandle)
+	scope.Logger.V(1).Info("OVH credentials validated", "serviceName", scope.OVHCluster.Spec.ServiceName)
 	conditions.MarkTrue(scope.OVHCluster, infrav1.OVHConnectionReadyCondition)
 
 	return nil
@@ -314,96 +319,146 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 	}
 
 	netConfig := scope.OVHCluster.Spec.NetworkConfig
+	region := scope.OVHCluster.Spec.Region
 
-	// If network ID already stored in status, verify it still exists
-	if scope.OVHCluster.Status.NetworkID != "" {
-		_, err := scope.OVHClient.GetPrivateNetwork(scope.OVHCluster.Status.NetworkID)
-		if err != nil {
-			if ovhclient.IsNotFound(err) {
-				logger.Info("Previously known network not found, will create new one")
-				scope.OVHCluster.Status.NetworkID = ""
-				scope.OVHCluster.Status.SubnetID = ""
-			} else {
-				return fmt.Errorf("checking network %s: %w", scope.OVHCluster.Status.NetworkID, err)
-			}
+	// 1. Ensure the network exists (use existing or create new).
+	if scope.OVHCluster.Status.NetworkID == "" {
+		if netConfig.PrivateNetworkID != "" {
+			// Use pre-existing network (user-provided)
+			scope.OVHCluster.Status.NetworkID = netConfig.PrivateNetworkID
 		} else {
-			// Network exists
-			conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkReadyCondition)
-			return nil
+			// Create a new network
+			networkName := locutil.GenerateRFC1035Name("capi", scope.Cluster.Name, "net")
+			logger.Info("Creating private network", "name", networkName)
+
+			network, err := scope.OVHClient.CreatePrivateNetwork(ovhclient.CreateNetworkOpts{
+				Name:    networkName,
+				Regions: []string{region},
+			})
+			if err != nil {
+				conditions.MarkFalse(scope.OVHCluster, infrav1.NetworkReadyCondition,
+					infrav1.NetworkCreationFailedReason, clusterv1.ConditionSeverityError,
+					"Failed to create network: %s", err.Error())
+
+				return fmt.Errorf("creating private network: %w", err)
+			}
+
+			scope.OVHCluster.Status.NetworkID = network.ID
+			conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkCreatedByControllerCondition)
+			logger.Info("Private network created", "networkID", network.ID)
 		}
 	}
 
-	// Use existing network if ID is provided
-	if netConfig.PrivateNetworkID != "" {
-		_, err := scope.OVHClient.GetPrivateNetwork(netConfig.PrivateNetworkID)
-		if err != nil {
-			conditions.MarkFalse(scope.OVHCluster, infrav1.NetworkReadyCondition,
-				infrav1.NetworkCreationFailedReason, clusterv1.ConditionSeverityError,
-				"Private network %s not found: %s", netConfig.PrivateNetworkID, err.Error())
+	// 2. Verify network is ACTIVE in the target region (subnet creation otherwise fails).
+	net, err := scope.OVHClient.GetPrivateNetwork(scope.OVHCluster.Status.NetworkID)
+	if err != nil {
+		if ovhclient.IsNotFound(err) {
+			logger.Info("Previously known network not found, clearing state")
+			scope.OVHCluster.Status.NetworkID = ""
+			scope.OVHCluster.Status.SubnetID = ""
 
-			return fmt.Errorf("verifying network %s: %w", netConfig.PrivateNetworkID, err)
+			return fmt.Errorf("network %s vanished, will recreate", scope.OVHCluster.Status.NetworkID)
 		}
 
-		scope.OVHCluster.Status.NetworkID = netConfig.PrivateNetworkID
+		return fmt.Errorf("getting network %s: %w", scope.OVHCluster.Status.NetworkID, err)
+	}
 
-		// Get existing subnet
-		subnets, err := scope.OVHClient.ListSubnets(netConfig.PrivateNetworkID)
+	regionStatus := ""
+
+	for _, r := range net.Regions {
+		if r.Region == region {
+			regionStatus = r.Status
+			break
+		}
+	}
+
+	if regionStatus != "ACTIVE" {
+		conditions.MarkFalse(scope.OVHCluster, infrav1.NetworkReadyCondition,
+			infrav1.NetworkCreationFailedReason, clusterv1.ConditionSeverityInfo,
+			"Network %s status in %s is %q, waiting for ACTIVE", net.ID, region, regionStatus)
+		logger.Info("Network not yet ACTIVE in region, requeueing", "region", region, "status", regionStatus)
+
+		return errNetworkNotReady
+	}
+
+	// 3. Ensure a subnet exists. Re-list each iteration so we recover from
+	// a previous subnet-creation failure (e.g. region activation race).
+	if scope.OVHCluster.Status.SubnetID == "" {
+		subnets, err := scope.OVHClient.ListSubnets(scope.OVHCluster.Status.NetworkID)
 		if err != nil {
 			return fmt.Errorf("listing subnets: %w", err)
 		}
 
 		if len(subnets) > 0 {
 			scope.OVHCluster.Status.SubnetID = subnets[0].ID
+			logger.Info("Found existing subnet", "subnetID", subnets[0].ID, "cidr", subnets[0].CIDR)
+		} else if netConfig.SubnetCIDR != "" {
+			logger.Info("Creating subnet", "cidr", netConfig.SubnetCIDR)
+
+			start, end := subnetRange(netConfig.SubnetCIDR)
+
+			subnet, err := scope.OVHClient.CreateSubnet(scope.OVHCluster.Status.NetworkID, ovhclient.CreateSubnetOpts{
+				Network: netConfig.SubnetCIDR,
+				Start:   start,
+				End:     end,
+				Region:  region,
+				DHCP:    true,
+			})
+			if err != nil {
+				return fmt.Errorf("creating subnet: %w", err)
+			}
+
+			scope.OVHCluster.Status.SubnetID = subnet.ID
+			logger.Info("Subnet created", "subnetID", subnet.ID, "cidr", subnet.CIDR)
 		}
-
-		conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkReadyCondition)
-		logger.Info("Using existing private network", "networkID", netConfig.PrivateNetworkID)
-
-		return nil
-	}
-
-	// Create new network
-	networkName := locutil.GenerateRFC1035Name("capi", scope.Cluster.Name, "net")
-
-	logger.Info("Creating private network", "name", networkName)
-
-	network, err := scope.OVHClient.CreatePrivateNetwork(ovhclient.CreateNetworkOpts{
-		Name:    networkName,
-		Regions: []string{scope.OVHCluster.Spec.Region},
-	})
-	if err != nil {
-		conditions.MarkFalse(scope.OVHCluster, infrav1.NetworkReadyCondition,
-			infrav1.NetworkCreationFailedReason, clusterv1.ConditionSeverityError,
-			"Failed to create network: %s", err.Error())
-
-		return fmt.Errorf("creating private network: %w", err)
-	}
-
-	scope.OVHCluster.Status.NetworkID = network.ID
-	// Mark that this network was created by the controller (for cleanup)
-	conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkCreatedByControllerCondition)
-
-	// Create subnet
-	if netConfig.SubnetCIDR != "" {
-		logger.Info("Creating subnet", "cidr", netConfig.SubnetCIDR)
-
-		subnet, err := scope.OVHClient.CreateSubnet(network.ID, ovhclient.CreateSubnetOpts{
-			Network: netConfig.SubnetCIDR,
-			Region:  scope.OVHCluster.Spec.Region,
-			DHCP:    true,
-		})
-		if err != nil {
-			return fmt.Errorf("creating subnet: %w", err)
-		}
-
-		scope.OVHCluster.Status.SubnetID = subnet.ID
-		logger.Info("Subnet created", "subnetID", subnet.ID, "cidr", subnet.CIDR)
 	}
 
 	conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkReadyCondition)
-	logger.Info("Private network created", "networkID", network.ID)
 
 	return nil
+}
+
+// errNetworkNotReady is a sentinel error indicating the network is not yet
+// ACTIVE in the target region. Callers should requeue rather than fail.
+var errNetworkNotReady = fmt.Errorf("network not yet ACTIVE in region")
+
+// subnetRange computes a default DHCP start/end IP range for a /24 CIDR.
+// Convention: reserve .1 for gateway, allocate .2-.254 for DHCP. For non-/24
+// CIDRs returns empty strings (caller may then omit start/end).
+func subnetRange(cidr string) (start, end string) {
+	// Very simple: works for /24 cidrs of form X.Y.Z.0/24
+	parts := []byte(cidr)
+	idx := -1
+
+	for i, b := range parts {
+		if b == '/' {
+			idx = i
+			break
+		}
+	}
+
+	if idx == -1 || string(parts[idx:]) != "/24" {
+		return "", ""
+	}
+
+	prefix := string(parts[:idx])
+	// strip last octet
+	last := -1
+
+	for i := len(prefix) - 1; i >= 0; i-- {
+		if prefix[i] == '.' {
+			last = i
+			break
+		}
+	}
+
+	if last == -1 {
+		return "", ""
+	}
+
+	base := prefix[:last+1]
+
+	return base + "2", base + "254"
 }
 
 // reconcileLoadBalancer ensures the Octavia load balancer exists and has a VIP.
