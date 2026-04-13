@@ -55,6 +55,9 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ env.TAG }}
+            type=raw,value=latest,enable=${{ !contains(env.TAG, '-') }}
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -108,7 +111,9 @@ jobs:
           go-version-file: go.mod
 
       - name: Generate release manifests
-        run: make release-manifests RELEASE_TAG=${{ env.TAG }}
+        run: |
+          make kustomize controller-gen
+          make release-manifests RELEASE_TAG=${{ env.TAG }}
 
       - name: Create GitHub Release
         env:
