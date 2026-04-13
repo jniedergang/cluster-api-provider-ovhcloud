@@ -19,17 +19,17 @@ package ovh
 
 // Instance represents an OVH Public Cloud compute instance.
 type Instance struct {
-	ID              string          `json:"id"`
-	Name            string          `json:"name"`
-	Status          string          `json:"status"` // ACTIVE, BUILD, REBOOT, ERROR, DELETED, etc.
-	FlavorID        string          `json:"flavorId"`
-	ImageID         string          `json:"imageId"`
-	Region          string          `json:"region"`
-	Created         string          `json:"created"`
-	IPAddresses     []IPAddress     `json:"ipAddresses"`
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	Status          string           `json:"status"` // ACTIVE, BUILD, REBOOT, ERROR, DELETED, etc.
+	FlavorID        string           `json:"flavorId"`
+	ImageID         string           `json:"imageId"`
+	Region          string           `json:"region"`
+	Created         string           `json:"created"`
+	IPAddresses     []IPAddress      `json:"ipAddresses"`
 	AttachedVolumes []AttachedVolume `json:"attachedVolumes,omitempty"`
-	SSHKeyID        string          `json:"sshKeyId,omitempty"`
-	MonthlyBilling  bool            `json:"monthlyBilling,omitempty"`
+	SSHKeyID        string           `json:"sshKeyId,omitempty"`
+	MonthlyBilling  bool             `json:"monthlyBilling,omitempty"`
 }
 
 // Instance status constants.
@@ -86,18 +86,18 @@ type Flavor struct {
 
 // Image represents an OS image available for instances.
 type Image struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Status       string `json:"status"`
-	Region       string `json:"region"`
-	CreationDate string `json:"creationDate"`
-	MinRAM       int    `json:"minRam"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Status       string  `json:"status"`
+	Region       string  `json:"region"`
+	CreationDate string  `json:"creationDate"`
+	MinRAM       int     `json:"minRam"`
 	MinDisk      int     `json:"minDisk"`
 	Size         float64 `json:"size"`
-	Type         string `json:"type"`
-	User         string `json:"user"`
-	Visibility   string `json:"visibility"`
-	PlanCode     string `json:"planCode,omitempty"`
+	Type         string  `json:"type"`
+	User         string  `json:"user"`
+	Visibility   string  `json:"visibility"`
+	PlanCode     string  `json:"planCode,omitempty"`
 }
 
 // SSHKey represents an SSH key registered in OVH.
@@ -136,6 +136,7 @@ func (n *PrivateNetwork) OpenStackIDForRegion(region string) string {
 			return r.OpenStackID
 		}
 	}
+
 	return ""
 }
 
@@ -185,19 +186,19 @@ type LBFlavor struct {
 
 // LoadBalancer represents an OVH managed load balancer (Octavia).
 type LoadBalancer struct {
-	ID                  string        `json:"id"`
-	Name                string        `json:"name"`
-	CreatedAt           string        `json:"createdAt,omitempty"`
-	UpdatedAt           string        `json:"updatedAt,omitempty"`
-	Region              string        `json:"region,omitempty"`
-	FlavorID            string        `json:"flavorId,omitempty"`
-	OperatingStatus     string        `json:"operatingStatus"`
-	ProvisioningStatus  string        `json:"provisioningStatus"`
-	VIPAddress          string        `json:"vipAddress"`
-	VIPNetworkID        string        `json:"vipNetworkId,omitempty"`
-	VIPSubnetID         string        `json:"vipSubnetId,omitempty"`
-	FloatingIP          *FloatingIPRef `json:"floatingIp,omitempty"`
-	Listeners           []ListenerRef `json:"listeners,omitempty"`
+	ID                 string         `json:"id"`
+	Name               string         `json:"name"`
+	CreatedAt          string         `json:"createdAt,omitempty"`
+	UpdatedAt          string         `json:"updatedAt,omitempty"`
+	Region             string         `json:"region,omitempty"`
+	FlavorID           string         `json:"flavorId,omitempty"`
+	OperatingStatus    string         `json:"operatingStatus"`
+	ProvisioningStatus string         `json:"provisioningStatus"`
+	VIPAddress         string         `json:"vipAddress"`
+	VIPNetworkID       string         `json:"vipNetworkId,omitempty"`
+	VIPSubnetID        string         `json:"vipSubnetId,omitempty"`
+	FloatingIP         *FloatingIPRef `json:"floatingIp,omitempty"`
+	Listeners          []ListenerRef  `json:"listeners,omitempty"`
 }
 
 // LoadBalancer status constants. OVH returns these in lowercase.
@@ -320,11 +321,11 @@ type addPoolMembersRequest struct {
 
 // FloatingIP represents a floating IP resource.
 type FloatingIP struct {
-	ID                string `json:"id"`
-	IP                string `json:"ip"`
-	Status            string `json:"status"`
-	AssociatedEntity  string `json:"associatedEntity,omitempty"`
-	Region            string `json:"region,omitempty"`
+	ID               string `json:"id"`
+	IP               string `json:"ip"`
+	Status           string `json:"status"`
+	AssociatedEntity string `json:"associatedEntity,omitempty"`
+	Region           string `json:"region,omitempty"`
 }
 
 // CreateFloatingIPOpts are the parameters for creating a floating IP.

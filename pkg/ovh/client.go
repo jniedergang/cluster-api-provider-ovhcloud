@@ -17,6 +17,7 @@ limitations under the License.
 package ovh
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/go-logr/logr"
 	goovh "github.com/ovh/go-ovh/ovh"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -73,10 +75,11 @@ func NewClientFromSecret(secret *corev1.Secret, serviceName, region string, logg
 }
 
 // projectPath returns the API path prefix for the current project.
-func (c *Client) projectPath(format string, args ...interface{}) string {
-	prefix := fmt.Sprintf("/cloud/project/%s", c.serviceName)
+func (c *Client) projectPath(format string, args ...any) string {
+	prefix := "/cloud/project/" + c.serviceName
 	if format != "" {
 		suffix := fmt.Sprintf(format, args...)
+
 		return prefix + suffix
 	}
 
@@ -84,10 +87,11 @@ func (c *Client) projectPath(format string, args ...interface{}) string {
 }
 
 // regionPath returns the API path prefix for region-scoped resources (LB, floating IP).
-func (c *Client) regionPath(format string, args ...interface{}) string {
+func (c *Client) regionPath(format string, args ...any) string {
 	prefix := fmt.Sprintf("/cloud/project/%s/region/%s", c.serviceName, c.region)
 	if format != "" {
 		suffix := fmt.Sprintf(format, args...)
+
 		return prefix + suffix
 	}
 
@@ -134,7 +138,7 @@ func (c *Client) retryWithBackoff(operation string, fn func() error) error {
 // (the typical CAPIOVH deployment uses CKs scoped to /cloud/project/{sn}/*).
 func (c *Client) ValidateCredentials() error {
 	if c.serviceName == "" {
-		return fmt.Errorf("serviceName is empty")
+		return errors.New("serviceName is empty")
 	}
 
 	var regions []string
@@ -147,7 +151,7 @@ func (c *Client) ValidateCredentials() error {
 	}
 
 	if len(regions) == 0 {
-		return fmt.Errorf("validating OVH credentials: no regions returned by project")
+		return errors.New("validating OVH credentials: no regions returned by project")
 	}
 
 	return nil
@@ -318,6 +322,7 @@ func isUUID(s string) bool {
 	if len(s) != 36 {
 		return false
 	}
+
 	for i, c := range s {
 		switch i {
 		case 8, 13, 18, 23:
@@ -325,11 +330,13 @@ func isUUID(s string) bool {
 				return false
 			}
 		default:
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			isHexDigit := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+			if !isHexDigit {
 				return false
 			}
 		}
 	}
+
 	return true
 }
 
@@ -341,7 +348,7 @@ func isUUID(s string) bool {
 // This unified lookup lets users specify any image transparently in OVHMachine.spec.imageName.
 func (c *Client) GetImageByName(name string) (*Image, error) {
 	if name == "" {
-		return nil, fmt.Errorf("image name is empty")
+		return nil, errors.New("image name is empty")
 	}
 
 	// Shortcut: if the name is a UUID, trust it as-is (no lookup needed)
@@ -605,7 +612,7 @@ func (c *Client) CreateLoadBalancer(opts CreateLoadBalancerOpts) (*LoadBalancer,
 		return existing, nil
 	}
 
-	var taskResp map[string]interface{}
+	var taskResp map[string]any
 
 	err := c.retryWithBackoff("CreateLoadBalancer", func() error {
 		return c.api.Post(c.regionPath("/loadbalancing/loadbalancer"), opts, &taskResp)
@@ -618,7 +625,7 @@ func (c *Client) CreateLoadBalancer(opts CreateLoadBalancerOpts) (*LoadBalancer,
 	// appear after POST returns the task descriptor.
 	const maxLookupAttempts = 10
 
-	for attempt := 0; attempt < maxLookupAttempts; attempt++ {
+	for attempt := range maxLookupAttempts {
 		lb, err := c.findLoadBalancerByName(opts.Name)
 		if err != nil {
 			return nil, fmt.Errorf("LB %q created but lookup failed: %w", opts.Name, err)

@@ -26,6 +26,7 @@ import (
 
 	"github.com/go-logr/logr"
 	goovh "github.com/ovh/go-ovh/ovh"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -72,7 +73,7 @@ func newTestServer(t *testing.T, handlers map[string]http.HandlerFunc) (*httptes
 	return server, client
 }
 
-func jsonResponse(w http.ResponseWriter, statusCode int, body interface{}) {
+func jsonResponse(w http.ResponseWriter, statusCode int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
@@ -141,7 +142,8 @@ func TestValidateCredentials(t *testing.T) {
 		},
 	})
 
-	if err := client.ValidateCredentials(); err != nil {
+	err := client.ValidateCredentials()
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -397,12 +399,14 @@ func TestGetImageByName_BYOIFallback(t *testing.T) {
 	_, client := newTestServer(t, map[string]http.HandlerFunc{
 		"GET " + imagePath: func(w http.ResponseWriter, r *http.Request) {
 			publicCalled = true
+
 			jsonResponse(w, http.StatusOK, []Image{
 				{ID: "pub-1", Name: "Ubuntu 22.04", Region: testRegion},
 			})
 		},
 		"GET " + snapshotPath: func(w http.ResponseWriter, r *http.Request) {
 			snapshotCalled = true
+
 			jsonResponse(w, http.StatusOK, []Image{
 				{ID: "byoi-1", Name: "openSUSE-Leap-15.6", Region: testRegion, Visibility: "private"},
 				{ID: "byoi-2", Name: "MyCompany-RHEL-9", Region: testRegion, Visibility: "private"},
@@ -443,6 +447,7 @@ func TestGetImageByName_PublicPreferred(t *testing.T) {
 		},
 		"GET " + snapshotPath: func(w http.ResponseWriter, r *http.Request) {
 			snapshotCalled = true
+
 			jsonResponse(w, http.StatusOK, []Image{})
 		},
 	})
@@ -563,7 +568,8 @@ func TestCreateLoadBalancer(t *testing.T) {
 	_, client := newTestServer(t, map[string]http.HandlerFunc{
 		"POST " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
 			postCalled = true
-			jsonResponse(w, http.StatusOK, map[string]interface{}{
+
+			jsonResponse(w, http.StatusOK, map[string]any{
 				"id":     "task-xyz-123",
 				"status": "in-progress",
 			})
@@ -574,6 +580,7 @@ func TestCreateLoadBalancer(t *testing.T) {
 			// First call (idempotency check): empty list, force POST
 			if getCallCount == 1 {
 				jsonResponse(w, http.StatusOK, []LoadBalancer{})
+
 				return
 			}
 
@@ -627,6 +634,7 @@ func TestCreateLoadBalancer_Idempotent(t *testing.T) {
 	_, client := newTestServer(t, map[string]http.HandlerFunc{
 		"POST " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
 			postCalled = true
+
 			t.Error("POST must not be called when LB already exists")
 		},
 		"GET " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
@@ -669,7 +677,8 @@ func TestAddPoolMembers_Batch(t *testing.T) {
 	_, client := newTestServer(t, map[string]http.HandlerFunc{
 		"POST " + expectedPath: func(w http.ResponseWriter, r *http.Request) {
 			var req addPoolMembersRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			err := json.NewDecoder(r.Body).Decode(&req)
+			if err != nil {
 				t.Errorf("decode error: %v", err)
 			}
 

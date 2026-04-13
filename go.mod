@@ -1,4 +1,4 @@
-module gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud
+module github.com/rancher-sandbox/cluster-api-provider-ovhcloud
 
 go 1.24.0
 

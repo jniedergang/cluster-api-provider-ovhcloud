@@ -132,19 +132,19 @@ func TestValidateOVHMachine_ValidWithVolumes(t *testing.T) {
 }
 
 func TestValidateOVHMachine_Update(t *testing.T) {
-	old := &OVHMachine{
+	oldM := &OVHMachine{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec:       OVHMachineSpec{FlavorName: "b2-7", ImageName: "Ubuntu 22.04"},
 	}
 
-	new := &OVHMachine{
+	newM := &OVHMachine{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "default"},
 		Spec:       OVHMachineSpec{FlavorName: "b2-15", ImageName: "Ubuntu 22.04"},
 	}
 
 	v := &OVHMachineValidator{}
 
-	_, err := v.ValidateUpdate(context.Background(), old, new)
+	_, err := v.ValidateUpdate(context.Background(), oldM, newM)
 	if err != nil {
 		t.Errorf("expected valid update, got error: %v", err)
 	}

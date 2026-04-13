@@ -17,7 +17,7 @@ limitations under the License.
 package ovh
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	goovh "github.com/ovh/go-ovh/ovh"
@@ -32,8 +32,8 @@ func TestIsNotFound(t *testing.T) {
 		{"nil error", nil, false},
 		{"OVH 404", &goovh.APIError{Code: 404, Message: "not found"}, true},
 		{"OVH 200", &goovh.APIError{Code: 200, Message: "ok"}, false},
-		{"generic not found", fmt.Errorf("resource not found"), true},
-		{"generic error", fmt.Errorf("something went wrong"), false},
+		{"generic not found", errors.New("resource not found"), true},
+		{"generic error", errors.New("something went wrong"), false},
 	}
 
 	for _, tt := range tests {
@@ -59,9 +59,9 @@ func TestIsRetryable(t *testing.T) {
 		{"OVH 504", &goovh.APIError{Code: 504, Message: "timeout"}, true},
 		{"OVH 400", &goovh.APIError{Code: 400, Message: "bad request"}, false},
 		{"OVH 404", &goovh.APIError{Code: 404, Message: "not found"}, false},
-		{"connection refused", fmt.Errorf("connection refused"), true},
-		{"timeout", fmt.Errorf("context timeout exceeded"), true},
-		{"generic error", fmt.Errorf("invalid input"), false},
+		{"connection refused", errors.New("connection refused"), true},
+		{"timeout", errors.New("context timeout exceeded"), true},
+		{"generic error", errors.New("invalid input"), false},
 	}
 
 	for _, tt := range tests {

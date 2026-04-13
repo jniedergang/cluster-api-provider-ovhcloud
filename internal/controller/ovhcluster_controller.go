@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,10 +41,10 @@ import (
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/patch"
 
-	infrav1 "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1"
-	capiovhmetrics "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/internal/metrics"
-	ovhclient "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/pkg/ovh"
-	locutil "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/util"
+	infrav1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1"
+	capiovhmetrics "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/internal/metrics"
+	ovhclient "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/pkg/ovh"
+	locutil "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/util"
 )
 
 const (
@@ -70,6 +71,7 @@ type ClusterScope struct {
 // OVHClusterReconciler reconciles an OVHCluster object.
 type OVHClusterReconciler struct {
 	client.Client
+
 	Scheme *runtime.Scheme
 }
 
@@ -91,6 +93,7 @@ func (r *OVHClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.Get(ctx, req.NamespacedName, ovhCluster); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("OVHCluster not found")
+
 			return ctrl.Result{}, nil
 		}
 
@@ -104,8 +107,10 @@ func (r *OVHClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	defer func() {
-		if patchErr := patchHelper.Patch(ctx, ovhCluster); patchErr != nil {
+		patchErr := patchHelper.Patch(ctx, ovhCluster)
+		if patchErr != nil {
 			logger.Error(patchErr, "failed to patch OVHCluster")
+
 			if rerr == nil {
 				rerr = patchErr
 			}
@@ -120,6 +125,7 @@ func (r *OVHClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if ownerCluster == nil {
 		logger.Info("Waiting for Cluster Controller to set OwnerRef on OVHCluster")
+
 		return ctrl.Result{RequeueAfter: requeueTimeShort}, nil
 	}
 
@@ -155,7 +161,7 @@ func (r *OVHClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // SetupWithManager sets up the controller with the Manager.
 func (r *OVHClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	// Index OVHCluster by identity secret name for watch
-	if err := mgr.GetFieldIndexer().IndexField(ctx, &infrav1.OVHCluster{},
+	err := mgr.GetFieldIndexer().IndexField(ctx, &infrav1.OVHCluster{},
 		".spec.identitySecret.name",
 		func(obj client.Object) []string {
 			cluster := obj.(*infrav1.OVHCluster)
@@ -165,7 +171,8 @@ func (r *OVHClusterReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Ma
 
 			return []string{cluster.Spec.IdentitySecret.Name}
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
@@ -191,9 +198,10 @@ func (r *OVHClusterReconciler) secretToOVHCluster(ctx context.Context, obj clien
 	}
 
 	clusterList := &infrav1.OVHClusterList{}
-	if err := r.List(ctx, clusterList, client.MatchingFields{
+	err := r.List(ctx, clusterList, client.MatchingFields{
 		".spec.identitySecret.name": secret.Name,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil
 	}
 
@@ -255,6 +263,7 @@ func (r *OVHClusterReconciler) ReconcileNormal(scope *ClusterScope) (reconcile.R
 	if !controllerutil.ContainsFinalizer(scope.OVHCluster, infrav1.ClusterFinalizer) &&
 		scope.OVHCluster.DeletionTimestamp.IsZero() {
 		controllerutil.AddFinalizer(scope.OVHCluster, infrav1.ClusterFinalizer)
+
 		return ctrl.Result{}, nil
 	}
 
@@ -267,7 +276,7 @@ func (r *OVHClusterReconciler) ReconcileNormal(scope *ClusterScope) (reconcile.R
 	if err := r.reconcileNetwork(scope); err != nil {
 		// Network not yet ACTIVE in region: requeue without surfacing as error
 		// (the LB step would fail anyway without subnet).
-		if err == errNetworkNotReady {
+		if errors.Is(err, errNetworkNotReady) {
 			return ctrl.Result{RequeueAfter: requeueTimeShort}, nil
 		}
 
@@ -292,7 +301,8 @@ func (r *OVHClusterReconciler) ReconcileNormal(scope *ClusterScope) (reconcile.R
 
 // reconcileCredentials validates the OVH API connection.
 func (r *OVHClusterReconciler) reconcileCredentials(scope *ClusterScope) error {
-	if err := scope.OVHClient.ValidateCredentials(); err != nil {
+	err := scope.OVHClient.ValidateCredentials()
+	if err != nil {
 		conditions.MarkFalse(scope.OVHCluster, infrav1.OVHConnectionReadyCondition,
 			infrav1.OVHAuthenticationFailedReason, clusterv1.ConditionSeverityError,
 			"Failed to validate OVH credentials: %s", err.Error())
@@ -354,6 +364,7 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 	if err != nil {
 		if ovhclient.IsNotFound(err) {
 			logger.Info("Previously known network not found, clearing state")
+
 			scope.OVHCluster.Status.NetworkID = ""
 			scope.OVHCluster.Status.SubnetID = ""
 
@@ -368,6 +379,7 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 	for _, r := range net.Regions {
 		if r.Region == region {
 			regionStatus = r.Status
+
 			break
 		}
 	}
@@ -420,7 +432,7 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 
 // errNetworkNotReady is a sentinel error indicating the network is not yet
 // ACTIVE in the target region. Callers should requeue rather than fail.
-var errNetworkNotReady = fmt.Errorf("network not yet ACTIVE in region")
+var errNetworkNotReady = errors.New("network not yet ACTIVE in region")
 
 // subnetRange computes a default DHCP start/end IP range for a /24 CIDR.
 // Convention: reserve .1 for gateway, allocate .2-.254 for DHCP. For non-/24
@@ -433,6 +445,7 @@ func subnetRange(cidr string) (start, end string) {
 	for i, b := range parts {
 		if b == '/' {
 			idx = i
+
 			break
 		}
 	}
@@ -448,6 +461,7 @@ func subnetRange(cidr string) (start, end string) {
 	for i := len(prefix) - 1; i >= 0; i-- {
 		if prefix[i] == '.' {
 			last = i
+
 			break
 		}
 	}
@@ -471,6 +485,7 @@ func (r *OVHClusterReconciler) reconcileLoadBalancer(scope *ClusterScope) (recon
 		if err != nil {
 			if ovhclient.IsNotFound(err) {
 				logger.Info("Previously known LB not found, will create new one")
+
 				scope.OVHCluster.Status.LoadBalancerID = ""
 				scope.OVHCluster.Status.ListenerID = ""
 				scope.OVHCluster.Status.PoolID = ""
@@ -655,20 +670,23 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 	if scope.OVHCluster.Status.LoadBalancerID != "" {
 		// Delete pool members, pool, listener, then LB
 		if scope.OVHCluster.Status.PoolID != "" {
-			if err := scope.OVHClient.DeletePool(scope.OVHCluster.Status.PoolID); err != nil {
+			err := scope.OVHClient.DeletePool(scope.OVHCluster.Status.PoolID)
+			if err != nil {
 				logger.Error(err, "failed to delete pool", "poolID", scope.OVHCluster.Status.PoolID)
 			}
 		}
 
 		if scope.OVHCluster.Status.ListenerID != "" {
-			if err := scope.OVHClient.DeleteListener(scope.OVHCluster.Status.ListenerID); err != nil {
+			err := scope.OVHClient.DeleteListener(scope.OVHCluster.Status.ListenerID)
+			if err != nil {
 				logger.Error(err, "failed to delete listener", "listenerID", scope.OVHCluster.Status.ListenerID)
 			}
 		}
 
 		logger.Info("Deleting load balancer", "lbID", scope.OVHCluster.Status.LoadBalancerID)
 
-		if err := scope.OVHClient.DeleteLoadBalancer(scope.OVHCluster.Status.LoadBalancerID); err != nil {
+		err := scope.OVHClient.DeleteLoadBalancer(scope.OVHCluster.Status.LoadBalancerID)
+		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("deleting LB: %w", err)
 		}
 	}
@@ -677,7 +695,8 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 	if scope.OVHCluster.Status.FloatingIPID != "" {
 		logger.Info("Deleting floating IP", "fipID", scope.OVHCluster.Status.FloatingIPID)
 
-		if err := scope.OVHClient.DeleteFloatingIP(scope.OVHCluster.Status.FloatingIPID); err != nil {
+		err := scope.OVHClient.DeleteFloatingIP(scope.OVHCluster.Status.FloatingIPID)
+		if err != nil {
 			logger.Error(err, "failed to delete floating IP")
 		}
 	}
@@ -687,7 +706,8 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 		if scope.OVHCluster.Status.NetworkID != "" {
 			logger.Info("Deleting private network (created by controller)", "networkID", scope.OVHCluster.Status.NetworkID)
 
-			if err := scope.OVHClient.DeletePrivateNetwork(scope.OVHCluster.Status.NetworkID); err != nil {
+			err := scope.OVHClient.DeletePrivateNetwork(scope.OVHCluster.Status.NetworkID)
+			if err != nil {
 				logger.Error(err, "failed to delete private network")
 			}
 		}

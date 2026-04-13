@@ -1,0 +1,6 @@
+# See https://www.kubernetes.dev/docs/guide/owners/
+approvers:
+  - jniedergang
+
+reviewers:
+  - jniedergang

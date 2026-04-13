@@ -20,13 +20,14 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
-	infrav1 "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1"
-	ovhclient "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/pkg/ovh"
+	infrav1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1"
+	ovhclient "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/pkg/ovh"
 )
 
 func TestHandleExistingInstance_Active(t *testing.T) {

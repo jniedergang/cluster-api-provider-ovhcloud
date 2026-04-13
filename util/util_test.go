@@ -55,6 +55,7 @@ func TestGenerateRFC1035Name(t *testing.T) {
 				if len(s) > 63 {
 					s = s[:63]
 				}
+
 				return strings.TrimRight(s, "-")
 			}(),
 		},

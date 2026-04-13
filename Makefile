@@ -28,8 +28,8 @@ endif
 TAG ?= dev
 ARCH ?= $(shell go env GOARCH)
 ALL_ARCH = amd64 arm64
-REGISTRY ?= gitea.home.zypp.fr
-ORG ?= jniedergang
+REGISTRY ?= ghcr.io
+ORG ?= rancher-sandbox
 IMAGE_NAME ?= cluster-api-provider-ovhcloud
 # Image URL to use all building/pushing image targets
 IMG ?= $(REGISTRY)/$(ORG)/$(IMAGE_NAME)
@@ -86,6 +86,47 @@ fmt: ## Run go fmt against code.
 .PHONY: vet
 vet: ## Run go vet against code.
 	go vet ./...
+
+GOLANGCI_LINT_VERSION ?= v2.11.1
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT)
+$(GOLANGCI_LINT): $(LOCALBIN)
+	test -s $(LOCALBIN)/golangci-lint || GOBIN=$(LOCALBIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+.PHONY: lint
+lint: golangci-lint ## Run golangci-lint over the codebase.
+	$(GOLANGCI_LINT) run -v --timeout 5m ./...
+
+.PHONY: lint-fix
+lint-fix: golangci-lint ## Run golangci-lint with --fix.
+	$(GOLANGCI_LINT) run -v --timeout 5m --fix ./...
+
+.PHONY: verify-modules
+verify-modules: ## Verify go.mod is tidy.
+	go mod tidy
+	@if !(git diff --quiet HEAD -- go.sum go.mod); then \
+		git diff -- go.mod go.sum; \
+		echo "go module files are out of date, run 'go mod tidy'"; exit 1; \
+	fi
+
+.PHONY: verify-gen
+verify-gen: generate ## Verify generated files are up to date.
+	@if !(git diff --quiet HEAD -- api/); then \
+		git diff -- api/; \
+		echo "generated files are out of date, run 'make generate'"; exit 1; \
+	fi
+
+.PHONY: verify-manifests
+verify-manifests: manifests ## Verify generated manifests are up to date.
+	@if !(git diff --quiet HEAD -- config/); then \
+		git diff -- config/; \
+		echo "generated manifests are out of date, run 'make manifests'"; exit 1; \
+	fi
+
+.PHONY: verify
+verify: verify-modules verify-gen verify-manifests lint ## Run all verification checks.
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.

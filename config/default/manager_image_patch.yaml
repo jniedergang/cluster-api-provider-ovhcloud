@@ -7,6 +7,6 @@ spec:
   template:
     spec:
       containers:
-      - image: localhost/capiovh:dev-00265a2
+      - image: ghcr.io/rancher-sandbox/cluster-api-provider-ovhcloud:dev
         imagePullPolicy: IfNotPresent
         name: manager

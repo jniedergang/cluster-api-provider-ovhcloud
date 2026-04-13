@@ -18,7 +18,7 @@ package util
 
 import (
 	"encoding/base64"
-	"fmt"
+	"errors"
 )
 
 // PrepareUserData reads the bootstrap data secret value and prepares it
@@ -29,7 +29,7 @@ import (
 // OVH API may accept it as-is or base64-encoded depending on the endpoint version.
 func PrepareUserData(bootstrapData []byte) (string, error) {
 	if len(bootstrapData) == 0 {
-		return "", fmt.Errorf("bootstrap data is empty")
+		return "", errors.New("bootstrap data is empty")
 	}
 
 	// OVH instance creation API accepts base64-encoded userData

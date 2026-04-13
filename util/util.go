@@ -23,14 +23,14 @@ import (
 	"regexp"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	infrav1 "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1"
-	ovhclient "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/pkg/ovh"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/go-logr/logr"
+	infrav1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1"
+	ovhclient "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/pkg/ovh"
 )
 
 // rfc1035Regex matches characters not allowed in RFC 1035 DNS labels.

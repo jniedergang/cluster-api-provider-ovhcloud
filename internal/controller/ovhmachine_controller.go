@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -42,16 +43,16 @@ import (
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/cluster-api/util/predicates"
 
-	infrav1 "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1"
-	capiovhmetrics "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/internal/metrics"
-	ovhclient "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/pkg/ovh"
-	locutil "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/util"
+	infrav1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1"
+	capiovhmetrics "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/internal/metrics"
+	ovhclient "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/pkg/ovh"
+	locutil "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/util"
 )
 
 const (
-	requeueDelay      = 10 * time.Second
-	requeueDelayLong  = 30 * time.Second
-	apiServerPort     = 6443
+	requeueDelay     = 10 * time.Second
+	requeueDelayLong = 30 * time.Second
+	apiServerPort    = 6443
 )
 
 var (
@@ -78,6 +79,7 @@ type MachineScope struct {
 // OVHMachineReconciler reconciles an OVHMachine object.
 type OVHMachineReconciler struct {
 	client.Client
+
 	Scheme *runtime.Scheme
 }
 
@@ -102,6 +104,7 @@ func (r *OVHMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("OVHMachine not found")
+
 			return ctrl.Result{}, nil
 		}
 
@@ -116,8 +119,10 @@ func (r *OVHMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Always attempt to Patch the OVHMachine object and status after each reconciliation.
 	defer func() {
-		if patchErr := patchHelper.Patch(ctx, ovhMachine); patchErr != nil {
+		patchErr := patchHelper.Patch(ctx, ovhMachine)
+		if patchErr != nil {
 			logger.Error(patchErr, "failed to patch OVHMachine")
+
 			if rerr == nil {
 				rerr = patchErr
 			}
@@ -132,6 +137,7 @@ func (r *OVHMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if ownerMachine == nil {
 		logger.Info("Waiting for Machine Controller to set OwnerRef on OVHMachine")
+
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
@@ -143,6 +149,7 @@ func (r *OVHMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if ownerCluster == nil {
 		logger.Info("Please associate this machine with a cluster")
+
 		return ctrl.Result{}, nil
 	}
 
@@ -161,6 +168,7 @@ func (r *OVHMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if err := r.Get(ctx, ovhClusterKey, ovhCluster); err != nil {
 		logger.Error(err, "unable to find corresponding OVHCluster")
+
 		return ctrl.Result{}, err
 	}
 
@@ -168,6 +176,7 @@ func (r *OVHMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	ovhClient, err := locutil.GetOVHClientFromCluster(ctx, r.Client, ovhCluster, logger)
 	if err != nil {
 		logger.Error(err, "unable to create OVH client")
+
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
 
@@ -238,6 +247,7 @@ func (r *OVHMachineReconciler) ReconcileNormal(scope *MachineScope) (reconcile.R
 	// Return early if paused
 	if annotations.IsPaused(scope.Cluster, scope.OVHMachine) {
 		logger.Info("Reconciliation is paused for this object")
+
 		scope.OVHMachine.Status.Ready = false
 		scope.OVHMachine.Status.Initialization = machineInitializationNotProvisioned
 
@@ -497,7 +507,7 @@ func (r *OVHMachineReconciler) createInstance(scope *MachineScope) (reconcile.Re
 // getBootstrapData reads the bootstrap data secret referenced by the Machine.
 func (r *OVHMachineReconciler) getBootstrapData(scope *MachineScope) ([]byte, error) {
 	if scope.Machine.Spec.Bootstrap.DataSecretName == nil {
-		return nil, fmt.Errorf("bootstrap data secret name is nil")
+		return nil, errors.New("bootstrap data secret name is nil")
 	}
 
 	secret := &corev1.Secret{}
@@ -507,7 +517,8 @@ func (r *OVHMachineReconciler) getBootstrapData(scope *MachineScope) ([]byte, er
 		Name:      *scope.Machine.Spec.Bootstrap.DataSecretName,
 	}
 
-	if err := r.Get(scope.Ctx, key, secret); err != nil {
+	err := r.Get(scope.Ctx, key, secret)
+	if err != nil {
 		return nil, fmt.Errorf("getting bootstrap secret %s: %w", key, err)
 	}
 
@@ -539,12 +550,14 @@ func (r *OVHMachineReconciler) ReconcileDelete(scope *MachineScope) (reconcile.R
 		logger.Info("Detaching and deleting volume", "volumeID", volID)
 
 		if scope.OVHMachine.Status.InstanceID != "" {
-			if err := scope.OVHClient.DetachVolume(volID, scope.OVHMachine.Status.InstanceID); err != nil {
+			err := scope.OVHClient.DetachVolume(volID, scope.OVHMachine.Status.InstanceID)
+			if err != nil {
 				logger.Error(err, "failed to detach volume", "volumeID", volID)
 			}
 		}
 
-		if err := scope.OVHClient.DeleteVolume(volID); err != nil {
+		err := scope.OVHClient.DeleteVolume(volID)
+		if err != nil {
 			logger.Error(err, "failed to delete volume", "volumeID", volID)
 		}
 	}

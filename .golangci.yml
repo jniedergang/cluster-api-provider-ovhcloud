@@ -1,0 +1,132 @@
+version: "2"
+run:
+  go: "1.24"
+  allow-parallel-runners: true
+linters:
+  default: all
+  disable:
+    - containedctx
+    - cyclop
+    - depguard
+    - err113
+    - exhaustive
+    - exhaustruct
+    - funlen
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocritic
+    - gomoddirectives
+    - ireturn
+    - maintidx
+    - nestif
+    - nolintlint
+    - nonamedreturns
+    - paralleltest
+    - rowserrcheck
+    - sqlclosecheck
+    - tagliatelle
+    - varnamelen
+    - wastedassign
+    - wrapcheck
+    - wsl
+    # Style-only linters disabled to keep the project focused on correctness:
+    - wsl_v5     # whitespace style; very noisy
+    - nlreturn   # newline before return; stylistic
+    - mnd        # magic number detector; noisy with status codes / timeouts
+    - noinlineerr # forbid inline err checks; conflicts with idiomatic Go
+    - funcorder  # method ordering; subjective
+    - nilnil     # often a valid pattern (no-op deletion idempotent)
+    - goconst    # too noisy on test fixtures
+    - revive     # subjective style rules
+    - unparam    # may flag legitimate API stability choices
+    - errchkjson # noisy on test fixtures
+    - forcetypeassert # noisy on JSON unmarshal in tests
+  settings:
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+      case-max-lines: 0
+    funlen:
+      lines: 110
+      statements: 60
+    lll:
+      line-length: 150
+    mnd:
+      ignored-numbers:
+        - "5"
+        - "4"
+        - "3"
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gochecknoglobals
+          - testpackage
+        path: _test\.go
+      - linters:
+          - gochecknoglobals
+        path: controlplane/api/v1alpha1/*
+      - linters:
+          - lll
+        source: '^//\+kubebuilder:'
+      - linters:
+          - dupl
+          - wrapcheck
+        path: _webhook\.go
+      - linters:
+          - revive
+        text: var-naming
+      - linters:
+          - revive
+        text: dot-imports
+        path: _test.go
+      - linters:
+          - staticcheck
+        text: ST1003
+      - linters:
+          - gosec
+        text: G114
+      - linters:
+          - gosec
+        path: api/v1alpha1
+        text: G402
+      - linters:
+          - revive
+        path: pkg/ovh
+        text: unexported-return
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - blank
+        - dot
+        - default
+        - prefix(k8s.io)
+        - prefix(sigs.k8s.io/cluster-api)
+        - localmodule
+      custom-order: true
+    goimports:
+      local-prefixes:
+        - github.com/rancher-sandbox/cluster-api-provider-ovhcloud
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

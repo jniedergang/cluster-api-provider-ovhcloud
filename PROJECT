@@ -7,7 +7,7 @@ domain: cluster.x-k8s.io
 layout:
 - go.kubebuilder.io/v4
 projectName: cluster-api-provider-ovhcloud
-repo: gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud
+repo: github.com/rancher-sandbox/cluster-api-provider-ovhcloud
 resources:
 - api:
     crdVersion: v1
@@ -16,7 +16,7 @@ resources:
   domain: cluster.x-k8s.io
   group: infrastructure
   kind: OVHMachine
-  path: gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1
+  path: github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -25,7 +25,7 @@ resources:
   domain: cluster.x-k8s.io
   group: infrastructure
   kind: OVHCluster
-  path: gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1
+  path: github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -33,7 +33,7 @@ resources:
   domain: cluster.x-k8s.io
   group: infrastructure
   kind: OVHMachineTemplate
-  path: gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1
+  path: github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1
   version: v1alpha1
 - api:
     crdVersion: v1
@@ -41,6 +41,6 @@ resources:
   domain: cluster.x-k8s.io
   group: infrastructure
   kind: OVHClusterTemplate
-  path: gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1
+  path: github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1
   version: v1alpha1
 version: "3"

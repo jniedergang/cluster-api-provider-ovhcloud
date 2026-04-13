@@ -21,14 +21,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
-	infrav1 "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1"
+	infrav1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1"
 )
 
 var (
@@ -68,7 +69,8 @@ func setupTestEnv(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		if err := testEnv.Stop(); err != nil {
+		err := testEnv.Stop()
+		if err != nil {
 			t.Errorf("failed to stop envtest: %v", err)
 		}
 	})

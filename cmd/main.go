@@ -37,8 +37,8 @@ import (
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
-	infrastructurev1alpha1 "gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/api/v1alpha1"
-	"gitea.home.zypp.fr/jniedergang/cluster-api-provider-ovhcloud/internal/controller"
+	infrastructurev1alpha1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1"
+	"github.com/rancher-sandbox/cluster-api-provider-ovhcloud/internal/controller"
 )
 
 var (
