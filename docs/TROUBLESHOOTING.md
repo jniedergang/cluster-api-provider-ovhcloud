@@ -205,6 +205,30 @@ by the RKE2 install script) until reconfigured.
 `1.1.1.1 8.8.8.8 9.9.9.9` BEFORE running `curl get.rke2.io | sh`, then
 synchronously polls until `getent hosts github.com` resolves.
 
+### Octavia pool members have no health monitor (HA caveat)
+
+The CAPIOVH controller currently creates Octavia LB pools without a
+health monitor (`operatingStatus: noMonitor`). The LB round-robins
+traffic to ALL pool members regardless of their actual health.
+
+Practical impact:
+* During CP rolling updates / failover, ~50 % of API requests via the
+  LB FIP can hit a dead or booting backend → 5 s timeout per request.
+* `cattle-cluster-agent` tunnels via the FIP can flap; the cluster may
+  show as `Connected=False` in Rancher UI for a while after a CP swap.
+* In-cluster traffic via the kubernetes ClusterIP is unaffected (it
+  uses kube-proxy + endpointslices, which DO track health).
+
+Workarounds until the controller adds a health monitor:
+* Run with 3+ CP replicas so quorum survives one bad backend.
+* For Rancher integration: re-restart `cattle-cluster-agent` after a
+  CP rolling update completes.
+* For external clients: implement client-side retry on 5xx / network
+  errors.
+
+Tracked in v0.3.0 — see https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/issues
+("Add LB health monitor on api-server-pool / rke2-register-pool").
+
 ### Rancher integration: cattle-cluster-agent needs serverca
 
 When Rancher uses a custom or Let's-Encrypt-issued cert with

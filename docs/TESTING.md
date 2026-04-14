@@ -114,7 +114,7 @@ Status legend: ✅ passed live | ⚠️ passed with caveat | ❌ blocked | ⏳ p
 | 7  | k8s in-place upgrade (v1.32.4 → v1.33.10)             | ✅      | v0.2.0          | ~9 min total; ~30 s API window on single-CP swap |
 | 8  | Multi-cluster in same OVH project                     | ✅      | v0.2.1          | Requires distinct `vlanID` topology variable per cluster |
 | 9  | Webhook + CRD validation rejects bad input            | ✅      | v0.2.1          | 16/16 cases via `test/e2e/run-validation-tests.sh`. Found CRD apply quirk: `kubectl apply` may not always propagate new properties — use `kubectl replace` to refresh schema |
-| 10 | HA control-plane survives 1 CP failure                | ⏳      | —               | Force-delete one of 3 CP machines, etcd quorum continues |
+| 10 | HA control-plane survives 1 CP failure                | ⚠️      | v0.2.1          | 3/3 CP recovers in 14m12s. Workload kubectl preserved. BUT: API availability via LB FIP drops to ~52% during the window because Octavia pool members are `noMonitor` — LB round-robins to dead/booting CPs. Real HA needs LB health monitor (tracked separately) |
 | 11 | Etcd snapshot + restore                               | ⏳      | —               | RKE2 takes scheduled snapshots; validate disaster recovery |
 | 12 | PVC via OVH block storage CSI                         | ⏳      | —               | No CSI installed today; gap report for v0.3.0 |
 | 13 | Service type=LoadBalancer via cloud-controller        | ⏳      | —               | No CCM-OVH today; gap report for v0.3.0 |
