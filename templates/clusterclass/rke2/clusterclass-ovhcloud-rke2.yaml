@@ -252,15 +252,34 @@ spec:
       # OVH Public Cloud instances on a private network do not receive a DNS
       # server via DHCP (only the gateway). Configure a public resolver so the
       # RKE2 installer can reach get.rke2.io, container registries, etc.
+      # Write resolv.conf as a static file (replacing the systemd-resolved
+      # symlink) so DNS works immediately, before systemd-resolved settles.
       preRKE2Commands:
         - |
+          set -e
+          # Override systemd-resolved (drop-in for future reboots).
           mkdir -p /etc/systemd/resolved.conf.d
           cat > /etc/systemd/resolved.conf.d/99-capiovh.conf <<'EOF'
           [Resolve]
           DNS=1.1.1.1 8.8.8.8
           FallbackDNS=9.9.9.9
           EOF
-          systemctl restart systemd-resolved
+          # Replace the resolv.conf symlink with a static file so DNS works
+          # NOW, without waiting for systemd-resolved to reload.
+          rm -f /etc/resolv.conf
+          cat > /etc/resolv.conf <<'EOF'
+          nameserver 1.1.1.1
+          nameserver 8.8.8.8
+          nameserver 9.9.9.9
+          options edns0 trust-ad
+          EOF
+          chmod 0644 /etc/resolv.conf
+          systemctl restart systemd-resolved || true
+          # Block until DNS for github.com resolves (RKE2 install pulls from GH).
+          for i in $(seq 1 30); do
+            getent hosts github.com >/dev/null 2>&1 && break
+            sleep 2
+          done
       machineTemplate:
         infrastructureRef:
           apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
@@ -277,10 +296,23 @@ spec:
       agentConfig: {}
       preRKE2Commands:
         - |
+          set -e
           mkdir -p /etc/systemd/resolved.conf.d
           cat > /etc/systemd/resolved.conf.d/99-capiovh.conf <<'EOF'
           [Resolve]
           DNS=1.1.1.1 8.8.8.8
           FallbackDNS=9.9.9.9
           EOF
-          systemctl restart systemd-resolved
+          rm -f /etc/resolv.conf
+          cat > /etc/resolv.conf <<'EOF'
+          nameserver 1.1.1.1
+          nameserver 8.8.8.8
+          nameserver 9.9.9.9
+          options edns0 trust-ad
+          EOF
+          chmod 0644 /etc/resolv.conf
+          systemctl restart systemd-resolved || true
+          for i in $(seq 1 30); do
+            getent hosts github.com >/dev/null 2>&1 && break
+            sleep 2
+          done
