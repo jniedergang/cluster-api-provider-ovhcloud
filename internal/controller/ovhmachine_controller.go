@@ -604,27 +604,66 @@ func (r *OVHMachineReconciler) ensureLBPoolMember(scope *MachineScope, instance 
 	(*scope.Logger).Info("Registered CP node as LB pool member",
 		"poolID", poolID, "memberID", member.ID, "address", privateIP)
 
-	// Also register in the RKE2 supervisor (9345) pool if it exists, so
-	// worker agents can reach the CP for CA fetch + registration.
-	if regPoolID := scope.OVHCluster.Status.RegisterPoolID; regPoolID != "" &&
-		scope.OVHMachine.Status.RegisterPoolMemberID == "" {
-		regMember, err := scope.OVHClient.AddPoolMember(regPoolID, ovhclient.CreateMemberOpts{
-			Name:         scope.Machine.Name,
-			Address:      privateIP,
-			ProtocolPort: 9345,
-			Weight:       1,
-		})
-		if err != nil {
-			(*scope.Logger).Info("Warning: failed to register CP in RKE2 supervisor pool",
-				"error", err)
-		} else {
-			scope.OVHMachine.Status.RegisterPoolMemberID = regMember.ID
-			(*scope.Logger).Info("Registered CP node as RKE2 supervisor pool member",
-				"poolID", regPoolID, "memberID", regMember.ID)
+	// Also register in the RKE2 supervisor (9345) pool so worker agents can
+	// reach the CP for CA fetch + registration. Discover the pool dynamically
+	// via FindPoolByName rather than relying on Status.RegisterPoolID, which
+	// may be empty if a previous status patch was dropped by the apiserver
+	// (e.g. openAPI schema cache lag after a CRD update).
+	r.ensureRKE2RegisterPoolMember(scope, privateIP)
+
+	return nil
+}
+
+// ensureRKE2RegisterPoolMember looks up the RKE2 supervisor pool by name on
+// the OVHCluster's LB and registers this CP machine as a member on port 9345.
+// Idempotent: skips if the pool already contains a member at the same address.
+// Best-effort: failures are logged, not returned.
+func (r *OVHMachineReconciler) ensureRKE2RegisterPoolMember(scope *MachineScope, privateIP string) {
+	lbID := scope.OVHCluster.Status.LoadBalancerID
+	if lbID == "" {
+		return
+	}
+
+	pool, err := scope.OVHClient.FindPoolByName(lbID, "rke2-register-pool")
+	if err != nil {
+		(*scope.Logger).Info("Warning: failed to look up RKE2 supervisor pool",
+			"error", err)
+
+		return
+	}
+
+	if pool == nil {
+		return // pool not yet created; next reconcile will retry
+	}
+
+	// Skip if already registered by address.
+	members, err := scope.OVHClient.ListPoolMembers(pool.ID)
+	if err == nil {
+		for i := range members {
+			if members[i].Address == privateIP && members[i].ProtocolPort == 9345 {
+				scope.OVHMachine.Status.RegisterPoolMemberID = members[i].ID
+
+				return
+			}
 		}
 	}
 
-	return nil
+	regMember, err := scope.OVHClient.AddPoolMember(pool.ID, ovhclient.CreateMemberOpts{
+		Name:         scope.Machine.Name,
+		Address:      privateIP,
+		ProtocolPort: 9345,
+		Weight:       1,
+	})
+	if err != nil {
+		(*scope.Logger).Info("Warning: failed to register CP in RKE2 supervisor pool",
+			"error", err)
+
+		return
+	}
+
+	scope.OVHMachine.Status.RegisterPoolMemberID = regMember.ID
+	(*scope.Logger).Info("Registered CP node as RKE2 supervisor pool member",
+		"poolID", pool.ID, "memberID", regMember.ID, "address", privateIP)
 }
 
 // removeLBPoolMember removes the CP machine from the LB pool, best-effort.

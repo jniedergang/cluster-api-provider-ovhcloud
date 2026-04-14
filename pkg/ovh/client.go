@@ -799,6 +799,66 @@ func (c *Client) DeleteLoadBalancer(lbID string) error {
 
 // --- Listener Operations ---
 
+// ListListeners lists all listeners in the current region.
+func (c *Client) ListListeners() ([]Listener, error) {
+	var listeners []Listener
+
+	err := c.retryWithBackoff("ListListeners", func() error {
+		return c.api.Get(c.regionPath("/loadbalancing/listener"), &listeners)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing listeners: %w", err)
+	}
+
+	return listeners, nil
+}
+
+// FindListenerByName returns the first listener matching the given name on the
+// specified load balancer, or nil if none exists. Useful for idempotent
+// listener creation: check before POST to avoid 409 conflicts if status didn't
+// persist after a successful prior create.
+func (c *Client) FindListenerByName(lbID, name string) (*Listener, error) {
+	listeners, err := c.ListListeners()
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range listeners {
+		if listeners[i].Name != name {
+			continue
+		}
+
+		for _, id := range listeners[i].LoadBalancerIDs {
+			if id == lbID {
+				return &listeners[i], nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+// FindPoolByName returns the first pool matching the given name on the
+// specified load balancer, or nil if none exists.
+func (c *Client) FindPoolByName(lbID, name string) (*Pool, error) {
+	var pools []Pool
+
+	err := c.retryWithBackoff("ListPools", func() error {
+		return c.api.Get(c.regionPath("/loadbalancing/pool"), &pools)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing pools: %w", err)
+	}
+
+	for i := range pools {
+		if pools[i].Name == name && pools[i].LoadBalancerID == lbID {
+			return &pools[i], nil
+		}
+	}
+
+	return nil, nil
+}
+
 // CreateListener creates a listener on a load balancer.
 func (c *Client) CreateListener(opts CreateListenerOpts) (*Listener, error) {
 	var listener Listener

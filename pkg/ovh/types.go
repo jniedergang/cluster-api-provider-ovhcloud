@@ -251,14 +251,16 @@ type LBNetworkRef struct {
 
 // Listener represents a load balancer listener.
 type Listener struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	Protocol           string `json:"protocol"` // TCP, HTTP, etc.
-	ProtocolPort       int32  `json:"protocolPort"`
-	DefaultPoolID      string `json:"defaultPoolId,omitempty"`
-	LoadBalancerID     string `json:"loadbalancerId,omitempty"`
-	ProvisioningStatus string `json:"provisioningStatus,omitempty"`
-	OperatingStatus    string `json:"operatingStatus,omitempty"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Protocol           string   `json:"protocol"` // TCP, HTTP, etc.
+	ProtocolPort       int32    `json:"protocolPort,omitempty"`
+	Port               int32    `json:"port,omitempty"`
+	DefaultPoolID      string   `json:"defaultPoolId,omitempty"`
+	LoadBalancerID     string   `json:"loadbalancerId,omitempty"`
+	LoadBalancerIDs    []string `json:"loadBalancerIds,omitempty"`
+	ProvisioningStatus string   `json:"provisioningStatus,omitempty"`
+	OperatingStatus    string   `json:"operatingStatus,omitempty"`
 }
 
 // CreateListenerOpts are the parameters for creating a listener.

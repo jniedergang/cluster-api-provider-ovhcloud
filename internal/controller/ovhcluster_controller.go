@@ -769,19 +769,35 @@ func (r *OVHClusterReconciler) ensureGatewayExposed(scope *ClusterScope) error {
 }
 
 // reconcileLBListener ensures the API server listener exists on the LB.
+// Idempotent: if a listener with the expected name already exists (e.g. from
+// a previous reconcile where the status patch didn't persist), adopt it.
 func (r *OVHClusterReconciler) reconcileLBListener(scope *ClusterScope) error {
 	if scope.OVHCluster.Status.ListenerID != "" {
-		return nil // Already created
+		return nil
 	}
 
 	logger := scope.Logger
+	lbID := scope.OVHCluster.Status.LoadBalancerID
+
+	existing, err := scope.OVHClient.FindListenerByName(lbID, apiServerListenerName)
+	if err != nil {
+		return fmt.Errorf("looking up api-server listener: %w", err)
+	}
+
+	if existing != nil {
+		logger.Info("Adopting existing API server listener", "listenerID", existing.ID)
+		scope.OVHCluster.Status.ListenerID = existing.ID
+
+		return nil
+	}
+
 	logger.Info("Creating API server listener on LB")
 
 	listener, err := scope.OVHClient.CreateListener(ovhclient.CreateListenerOpts{
 		Name:           apiServerListenerName,
 		Protocol:       apiServerProtocol,
 		Port:           apiServerLBPort,
-		LoadBalancerID: scope.OVHCluster.Status.LoadBalancerID,
+		LoadBalancerID: lbID,
 	})
 	if err != nil {
 		return fmt.Errorf("creating listener: %w", err)
@@ -793,21 +809,36 @@ func (r *OVHClusterReconciler) reconcileLBListener(scope *ClusterScope) error {
 	return nil
 }
 
-// reconcileLBPool ensures the backend pool exists on the LB.
+// reconcileLBPool ensures the backend pool exists on the LB. Idempotent.
 func (r *OVHClusterReconciler) reconcileLBPool(scope *ClusterScope) error {
 	if scope.OVHCluster.Status.PoolID != "" {
-		return nil // Already created
+		return nil
 	}
 
 	logger := scope.Logger
+	lbID := scope.OVHCluster.Status.LoadBalancerID
+	poolName := apiServerListenerName + "-pool"
+
+	existing, err := scope.OVHClient.FindPoolByName(lbID, poolName)
+	if err != nil {
+		return fmt.Errorf("looking up api-server pool: %w", err)
+	}
+
+	if existing != nil {
+		logger.Info("Adopting existing API server pool", "poolID", existing.ID)
+		scope.OVHCluster.Status.PoolID = existing.ID
+
+		return nil
+	}
+
 	logger.Info("Creating backend pool on LB")
 
 	pool, err := scope.OVHClient.CreatePool(ovhclient.CreatePoolOpts{
-		Name:           apiServerListenerName + "-pool",
+		Name:           poolName,
 		Protocol:       apiServerProtocol,
 		Algorithm:      lbAlgorithm,
 		ListenerID:     scope.OVHCluster.Status.ListenerID,
-		LoadBalancerID: scope.OVHCluster.Status.LoadBalancerID,
+		LoadBalancerID: lbID,
 	})
 	if err != nil {
 		return fmt.Errorf("creating pool: %w", err)
@@ -821,19 +852,34 @@ func (r *OVHClusterReconciler) reconcileLBPool(scope *ClusterScope) error {
 
 // reconcileRKE2RegisterListener ensures the RKE2 supervisor (port 9345)
 // listener exists on the LB so worker nodes can register with the cluster.
+// Idempotent via FindListenerByName.
 func (r *OVHClusterReconciler) reconcileRKE2RegisterListener(scope *ClusterScope) error {
 	if scope.OVHCluster.Status.RegisterListenerID != "" {
 		return nil
 	}
 
 	logger := scope.Logger
+	lbID := scope.OVHCluster.Status.LoadBalancerID
+
+	existing, err := scope.OVHClient.FindListenerByName(lbID, rke2RegisterListenerName)
+	if err != nil {
+		return fmt.Errorf("looking up rke2-register listener: %w", err)
+	}
+
+	if existing != nil {
+		logger.Info("Adopting existing RKE2 supervisor listener", "listenerID", existing.ID)
+		scope.OVHCluster.Status.RegisterListenerID = existing.ID
+
+		return nil
+	}
+
 	logger.Info("Creating RKE2 supervisor (9345) listener on LB")
 
 	listener, err := scope.OVHClient.CreateListener(ovhclient.CreateListenerOpts{
 		Name:           rke2RegisterListenerName,
 		Protocol:       apiServerProtocol,
 		Port:           rke2RegisterLBPort,
-		LoadBalancerID: scope.OVHCluster.Status.LoadBalancerID,
+		LoadBalancerID: lbID,
 	})
 	if err != nil {
 		return fmt.Errorf("creating RKE2 supervisor listener: %w", err)
@@ -846,21 +892,36 @@ func (r *OVHClusterReconciler) reconcileRKE2RegisterListener(scope *ClusterScope
 }
 
 // reconcileRKE2RegisterPool ensures the backend pool for the RKE2 supervisor
-// port exists on the LB.
+// port exists on the LB. Idempotent.
 func (r *OVHClusterReconciler) reconcileRKE2RegisterPool(scope *ClusterScope) error {
 	if scope.OVHCluster.Status.RegisterPoolID != "" {
 		return nil
 	}
 
 	logger := scope.Logger
+	lbID := scope.OVHCluster.Status.LoadBalancerID
+	poolName := rke2RegisterListenerName + "-pool"
+
+	existing, err := scope.OVHClient.FindPoolByName(lbID, poolName)
+	if err != nil {
+		return fmt.Errorf("looking up rke2-register pool: %w", err)
+	}
+
+	if existing != nil {
+		logger.Info("Adopting existing RKE2 supervisor pool", "poolID", existing.ID)
+		scope.OVHCluster.Status.RegisterPoolID = existing.ID
+
+		return nil
+	}
+
 	logger.Info("Creating RKE2 supervisor backend pool on LB")
 
 	pool, err := scope.OVHClient.CreatePool(ovhclient.CreatePoolOpts{
-		Name:           rke2RegisterListenerName + "-pool",
+		Name:           poolName,
 		Protocol:       apiServerProtocol,
 		Algorithm:      lbAlgorithm,
 		ListenerID:     scope.OVHCluster.Status.RegisterListenerID,
-		LoadBalancerID: scope.OVHCluster.Status.LoadBalancerID,
+		LoadBalancerID: lbID,
 	})
 	if err != nil {
 		return fmt.Errorf("creating RKE2 supervisor pool: %w", err)
