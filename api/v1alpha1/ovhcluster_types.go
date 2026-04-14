@@ -210,6 +210,19 @@ type OVHClusterStatus struct {
 	// FloatingIPID is the floating IP assigned to the load balancer.
 	// +optional
 	FloatingIPID string `json:"floatingIPID,omitempty"`
+
+	// GatewayID is the internet gateway created on the private network when a
+	// floating IP is allocated. The gateway has an interface on the subnet and,
+	// once "exposed", provides SNAT outbound internet access for all instances
+	// on the subnet.
+	// +optional
+	GatewayID string `json:"gatewayID,omitempty"`
+
+	// GatewayExposed is set to true once the gateway has been attached to a
+	// public port (via POST /gateway/{id}/expose) enabling SNAT outbound
+	// connectivity for instances on the subnet.
+	// +optional
+	GatewayExposed bool `json:"gatewayExposed,omitempty"`
 }
 
 //+kubebuilder:object:root=true

@@ -643,12 +643,20 @@ func (r *OVHClusterReconciler) reconcileFloatingIP(scope *ClusterScope, lb *ovhc
 	if lb.FloatingIP != nil && lb.FloatingIP.IP != "" {
 		scope.OVHCluster.Status.FloatingIPID = lb.FloatingIP.ID
 
+		if err := r.ensureGatewayExposed(scope); err != nil {
+			logger.Info("Warning: failed to expose gateway, will retry", "error", err)
+		}
+
 		return lb.FloatingIP.IP, nil
 	}
 
 	// Floating IP was allocated in a previous reconcile but the LB response
 	// hasn't caught up; fetch it directly.
 	if scope.OVHCluster.Status.FloatingIPID != "" {
+		if err := r.ensureGatewayExposed(scope); err != nil {
+			logger.Info("Warning: failed to expose gateway, will retry", "error", err)
+		}
+
 		fip, gerr := scope.OVHClient.GetFloatingIP(scope.OVHCluster.Status.FloatingIPID)
 		if gerr == nil && fip != nil && fip.IP != "" {
 			return fip.IP, nil
@@ -674,6 +682,15 @@ func (r *OVHClusterReconciler) reconcileFloatingIP(scope *ClusterScope, lb *ovhc
 	scope.OVHCluster.Status.FloatingIPID = fip.ID
 	logger.Info("Floating IP attached", "fipID", fip.ID, "ip", fip.IP, "lbID", lb.ID)
 
+	// The allocate+attach call created an internet gateway on the private
+	// subnet. For instances on that subnet to get SNAT outbound internet
+	// (needed to download the RKE2 install script, container images, etc.),
+	// the gateway must be explicitly exposed.
+	if err := r.ensureGatewayExposed(scope); err != nil {
+		logger.Info("Warning: failed to expose gateway for outbound internet, will retry",
+			"error", err)
+	}
+
 	// The allocation response may not yet include the public IP address.
 	// Fetch the floating IP directly to get the actual IP, retrying on next
 	// reconcile if still empty.
@@ -687,6 +704,51 @@ func (r *OVHClusterReconciler) reconcileFloatingIP(scope *ClusterScope, lb *ovhc
 	}
 
 	return fip.IP, nil
+}
+
+// ensureGatewayExposed finds the internet gateway on the cluster's private
+// subnet and calls POST /gateway/{id}/expose so that instances on the subnet
+// get SNAT outbound connectivity. Idempotent: skips if already exposed.
+func (r *OVHClusterReconciler) ensureGatewayExposed(scope *ClusterScope) error {
+	logger := scope.Logger
+
+	if scope.OVHCluster.Status.GatewayExposed {
+		return nil
+	}
+
+	// Discover the gateway if we haven't recorded it yet.
+	if scope.OVHCluster.Status.GatewayID == "" {
+		gws, err := scope.OVHClient.ListGateways()
+		if err != nil {
+			return fmt.Errorf("listing gateways: %w", err)
+		}
+
+		gwName := "capi-" + scope.Cluster.Name + "-gw"
+
+		for i := range gws {
+			if gws[i].Name == gwName {
+				scope.OVHCluster.Status.GatewayID = gws[i].ID
+				logger.Info("Discovered internet gateway", "gatewayID", gws[i].ID, "name", gwName)
+
+				break
+			}
+		}
+
+		if scope.OVHCluster.Status.GatewayID == "" {
+			return fmt.Errorf("no gateway named %s found in region", gwName)
+		}
+	}
+
+	logger.Info("Exposing gateway to public network for SNAT outbound",
+		"gatewayID", scope.OVHCluster.Status.GatewayID)
+
+	if err := scope.OVHClient.ExposeGateway(scope.OVHCluster.Status.GatewayID); err != nil {
+		return fmt.Errorf("exposing gateway: %w", err)
+	}
+
+	scope.OVHCluster.Status.GatewayExposed = true
+
+	return nil
 }
 
 // reconcileLBListener ensures the API server listener exists on the LB.

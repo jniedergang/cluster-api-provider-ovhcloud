@@ -703,6 +703,38 @@ func (c *Client) AssociateFloatingIPToLB(lbID, floatingIPID string) error {
 	return nil
 }
 
+// ListGateways lists all gateways in the current region.
+func (c *Client) ListGateways() ([]Gateway, error) {
+	var gws []Gateway
+
+	err := c.retryWithBackoff("ListGateways", func() error {
+		return c.api.Get(c.regionPath("/gateway"), &gws)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing gateways: %w", err)
+	}
+
+	return gws, nil
+}
+
+// ExposeGateway attaches a public port to the gateway, enabling SNAT outbound
+// internet access for instances on the subnet the gateway is attached to.
+//
+// OVH endpoint: POST /gateway/{id}/expose
+// A gateway created implicitly by the floating-IP flow is set up for inbound
+// DNAT only. Calling expose adds a public interface so traffic from the
+// private subnet can egress through the gateway's new public IP.
+func (c *Client) ExposeGateway(gatewayID string) error {
+	err := c.retryWithBackoff("ExposeGateway", func() error {
+		return c.api.Post(c.regionPath("/gateway/%s/expose", gatewayID), nil, nil)
+	})
+	if err != nil {
+		return fmt.Errorf("exposing gateway %s: %w", gatewayID, err)
+	}
+
+	return nil
+}
+
 // CreateLoadBalancerFloatingIP allocates a new floating IP on the external
 // network and attaches it to a load balancer in a single call. This is the
 // only reliable way to get a public IP on an Octavia LB in OVH Public Cloud

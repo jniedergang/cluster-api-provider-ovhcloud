@@ -328,6 +328,25 @@ type FloatingIP struct {
 	Region           string `json:"region,omitempty"`
 }
 
+// Gateway represents an OVH internet gateway attached to a private subnet.
+type Gateway struct {
+	ID         string             `json:"id"`
+	Name       string             `json:"name"`
+	Status     string             `json:"status,omitempty"`
+	Model      string             `json:"model,omitempty"`
+	Region     string             `json:"region,omitempty"`
+	Interfaces []GatewayInterface `json:"interfaces,omitempty"`
+}
+
+// GatewayInterface is one of the network interfaces attached to a gateway
+// (usually one private + one public after `expose`).
+type GatewayInterface struct {
+	ID        string `json:"id"`
+	IP        string `json:"ip,omitempty"`
+	NetworkID string `json:"networkId,omitempty"`
+	SubnetID  string `json:"subnetId,omitempty"`
+}
+
 // CreateFloatingIPOpts are the parameters for creating a floating IP.
 type CreateFloatingIPOpts struct {
 	IP          string `json:"ip,omitempty"`
