@@ -30,6 +30,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `docs/fleet-addons.md` — end-to-end architecture + how-to guide
 - **`metadata.yaml`**: extended with `v0.2` release series so
   `clusterctl` accepts this minor.
+- **Rancher import helper**: new `scripts/import-to-rancher.sh` performs
+  the `cluster.management.cattle.io` discovery, applies the registration
+  manifest, and idempotently patches the `cattle-cluster-agent`
+  Deployment to mount the `cattle-system/serverca` ConfigMap. Required
+  when Rancher uses STRICT_VERIFY=true with a custom or LE-issued cert.
+- **`rancherServerCA` ClusterClass topology variable**: when set, the
+  bundled ClusterClass writes
+  `/var/lib/rancher/rke2/server/manifests/capiovh-rancher-serverca.yaml`
+  on each CP node. RKE2's auto-apply mechanism then creates the
+  `cattle-system` namespace and the `serverca` ConfigMap during server
+  startup, so step 1 of the import helper has its data ready.
+
+### Fixed
+
+End-to-end live validation on OVH `EU-WEST-PAR` uncovered a series of
+bugs across DNS, FIP, providerID linkage and Calico routing that all
+land in this release. Every cluster created with v0.1.x is functional
+but several stuck-state failure modes are now eliminated:
+
+- **DNS bootstrap on private vRack**: OVH vRack DHCP only hands out a
+  default route, no DNS server. The previous `preRKE2Commands` snippet
+  wrote a `systemd-resolved` drop-in then restarted the service, racing
+  with the immediately-following `curl get.rke2.io | sh`. The script
+  could resolve `get.rke2.io` but then fail on `github.com`, leaving
+  RKE2 never installed. Now we replace `/etc/resolv.conf` with a static
+  file pointing at `1.1.1.1`/`8.8.8.8`/`9.9.9.9` and synchronously poll
+  until `getent hosts github.com` resolves before continuing.
+- **`Machine` ↔ `Node` linkage** (`MachineDeployment` stuck in
+  `ScalingUp`): RKE2 registers nodes with `providerID=rke2://<hostname>`
+  by default, which never matches the OVHMachine's
+  `ovhcloud://<region>/<uuid>`. CAPI cannot link them, so MD reports
+  Unavailable and `MachineHealthCheck` cannot remediate. Fixed by
+  injecting a kubelet `--provider-id` config drop-in that combines the
+  cluster region (written to `/etc/capiovh/region` via a ClusterClass
+  JSONPatch) with the instance UUID fetched from OVH OpenStack metadata.
+  The previously-orphaned `util.InitializeWorkloadNode` helper is also
+  now wired up as a backup in the OVHMachine reconciler.
+- **Calico SNAT skipped due to CIDR overlap**: the default RKE2 pod
+  CIDR `10.42.0.0/16` overlapped the default `subnetCIDR`
+  `10.42.0.0/24`. Calico saw node IPs as inside its IP pool and skipped
+  `natOutgoing`, so pods sending to ClusterIPs leaked out instances with
+  pod source IPs and were dropped by OVH neutron port-security. The
+  ClusterClass now writes
+  `/etc/rancher/rke2/config.yaml.d/10-cidrs.yaml` with `cluster-cidr:
+  10.244.0.0/16` and `service-cidr: 10.96.0.0/16` so they cannot
+  overlap with the default vRack subnet.
+- **Floating IP rediscovery** after `CreateLoadBalancerFloatingIP`:
+  OVH returns a transient placeholder ID; the actually-allocated FIP
+  gets a different ID under the LB's `.floatingIp.id`. Storing the
+  placeholder caused the controller to spin forever on
+  `Waiting for floating IP to be allocated` and the
+  `ControlPlaneEndpoint` was never set. Fixed by re-fetching the LB
+  (or listing FIPs by `associatedEntity`) immediately after creation.
+- **Floating IP cleanup**: OVH's `DELETE /floatingip/{id}` returns 200
+  but is asynchronous and silently detaches (rather than removes) when
+  the LB is in `PENDING_DELETE`. `OVHCluster.ReconcileDelete` now
+  captures all FIPs associated with the cluster's LB BEFORE deleting
+  the LB, then `Get`s after each `Delete` and requeues until the
+  resource is truly gone.
+- **Load balancer cleanup idempotency**: `DeleteLoadBalancer` now
+  treats 409 `Invalid state PENDING_DELETE` / `PENDING_UPDATE` as
+  success. New helper `IsAlreadyDeleting` in `pkg/ovh/errors.go`.
 
 ### Deferred to v0.3.0
 

@@ -139,6 +139,90 @@ kubectl -n capi-system rollout restart deploy/capi-controller-manager
 The CAPI controller caches the discovered CRDs at startup; after
 installing a new infrastructure provider it needs to re-discover.
 
+## OVH-specific gotchas
+
+These behaviors are specific to OVH Public Cloud (vRack networking) and
+were uncovered during live E2E validation. Most are transparently handled
+by CAPIOVH ≥ v0.1.3, but worth knowing if you debug a stuck cluster.
+
+### Pod CIDR must NOT overlap with vRack subnet
+
+The default RKE2 pod CIDR is `10.42.0.0/16`. If your CAPIOVH cluster also
+uses `10.42.0.0/24` for the vRack subnet (the default `subnetCIDR`
+variable), Calico's `natOutgoing` rule sees the node IPs as inside its
+IP pool and **skips SNAT**. Pods then send to the kubernetes ClusterIP
+service with their pod source IP, OVH neutron port-security drops the
+egress, and pods cannot reach the API.
+
+Symptoms: `cattle-cluster-agent` / `coredns` / any pod-to-API timeouts;
+`MachineDeployment` shows nodes Ready but Rancher import never completes.
+
+**Fix in v0.1.3+**: the bundled ClusterClass writes
+`/etc/rancher/rke2/config.yaml.d/10-cidrs.yaml` with `cluster-cidr: 10.244.0.0/16`
+and `service-cidr: 10.96.0.0/16` so they never overlap with the default
+`10.42.0.0/24` vRack subnet. If you change `subnetCIDR`, ensure your pod
+CIDR (set in your fork of the ClusterClass) also stays disjoint.
+
+### kubelet provider-id must be set explicitly
+
+RKE2 registers each Node with `providerID=rke2://<hostname>` by default.
+CAPI needs `providerID=ovhcloud://<region>/<instance-uuid>` to link
+`Machine` ↔ `Node`. Without it, `MachineDeployment` stays in `ScalingUp`
+forever and `MachineHealthCheck` cannot remediate.
+
+**Fix in v0.1.3+**: a `preRKE2Commands` snippet fetches the instance UUID
+from OVH OpenStack metadata (`http://169.254.169.254/openstack/latest/meta_data.json`)
+and writes `/etc/rancher/rke2/config.yaml.d/90-provider-id.yaml` with
+`kubelet-arg: provider-id=...` before RKE2 starts. The cluster region is
+written to `/etc/capiovh/region` via a ClusterClass JSONPatch.
+
+### Floating IP cleanup is async (and often slow)
+
+`DELETE /cloud/project/{id}/region/{region}/floatingip/{fipID}` returns
+`200 OK` immediately but the actual removal may take several minutes,
+and a FIP attached to a load balancer in `PENDING_DELETE` state is
+"detached" rather than removed.
+
+**Fix in v0.1.3+**: `OVHCluster` `ReconcileDelete` captures all FIPs
+associated with the cluster's LB **before** deleting the LB, then loops
+on `GetFloatingIP` after each `DeleteFloatingIP` call and requeues if
+the resource is still present. Manual cleanup is rarely needed but in
+extreme cases:
+
+```bash
+ovh_get "/cloud/project/$SVC/region/$REG/floatingip" \
+  | jq -r '.[] | select(.associatedEntity == null) | .id' \
+  | xargs -I{} ovh_delete "/cloud/project/$SVC/region/$REG/floatingip/{}"
+```
+
+### DNS not provided by vRack DHCP
+
+vRack DHCP only hands out a default route; no DNS server. Cloud-init's
+default `systemd-resolved` will not be able to resolve `github.com` (used
+by the RKE2 install script) until reconfigured.
+
+**Fix in v0.1.3+**: `preRKE2Commands` overwrites `/etc/resolv.conf` with
+`1.1.1.1 8.8.8.8 9.9.9.9` BEFORE running `curl get.rke2.io | sh`, then
+synchronously polls until `getent hosts github.com` resolves.
+
+### Rancher integration: cattle-cluster-agent needs serverca
+
+When Rancher uses a custom or Let's-Encrypt-issued cert with
+`STRICT_VERIFY=true`, the import-manifest's `cattle-cluster-agent`
+Deployment expects to find the trusted CA bundle at
+`/etc/kubernetes/ssl/certs/serverca`. Without it, the agent crashloops
+with `unable to read CA file from /etc/kubernetes/ssl/certs/serverca`
+and the cluster stays Pending in Rancher UI.
+
+**Fix in v0.1.3+**:
+
+1. Set `rancherServerCA` topology variable on the `Cluster` to the PEM CA
+   bundle. CAPIOVH will create the `cattle-system/serverca` ConfigMap
+   automatically via an RKE2 auto-apply manifest.
+2. Run `scripts/import-to-rancher.sh <cluster-name>` to apply the
+   import URL **and** patch the agent Deployment to mount the ConfigMap.
+   The script is idempotent.
+
 ## Where to ask for help
 
 - GitHub issues: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/issues

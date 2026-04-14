@@ -122,6 +122,61 @@ Or use one of the templates directly (see [../templates/](../templates/)).
 kubectl -n demo get cluster,ovhcluster,machine,ovhmachine -w
 ```
 
+### Importing the workload cluster into Rancher
+
+If you provision the cluster on a management cluster running Rancher
+(via Rancher Turtles or directly), the workload cluster needs to register
+with Rancher to appear in the UI. Rancher creates a
+`cluster.management.cattle.io` automatically when it sees the new CAPI
+`Cluster`, but the agent on the workload still needs:
+
+1. The Rancher import manifest applied (creates `cattle-cluster-agent`)
+2. (When Rancher uses STRICT_VERIFY) the trusted CA bundle mounted on
+   the agent at `/etc/kubernetes/ssl/certs/serverca`
+
+CAPIOVH ships two pieces to make this one step:
+
+**a)** Set the optional `rancherServerCA` topology variable on the
+`Cluster` to your Rancher CA bundle (PEM, concatenated chain). When
+present, the ClusterClass writes
+`/var/lib/rancher/rke2/server/manifests/capiovh-rancher-serverca.yaml`
+on every CP node, and RKE2 auto-applies the `cattle-system/serverca`
+ConfigMap on startup.
+
+```yaml
+spec:
+  topology:
+    variables:
+      ...
+      - name: rancherServerCA
+        value: |
+          -----BEGIN CERTIFICATE-----
+          ...root CA...
+          -----END CERTIFICATE-----
+          -----BEGIN CERTIFICATE-----
+          ...intermediate...
+          -----END CERTIFICATE-----
+```
+
+You can extract the CA bundle from any other Rancher-managed cluster
+already imported (e.g. the management cluster):
+
+```bash
+kubectl --kubeconfig=$WORKING_CLUSTER_KUBECONFIG \
+  -n cattle-system get cm serverca -o jsonpath='{.data.serverca}'
+```
+
+**b)** Run the helper script to apply the import manifest **and**
+patch the `cattle-cluster-agent` Deployment to mount the ConfigMap:
+
+```bash
+export MGMT_KUBECONFIG=/path/to/rancher-mgmt.yaml
+export WORKLOAD_KUBECONFIG=/path/to/mycluster.yaml
+./scripts/import-to-rancher.sh mycluster
+```
+
+The script is idempotent — safe to re-run after agent upgrades.
+
 ## Monitoring
 
 ### Prometheus metrics
