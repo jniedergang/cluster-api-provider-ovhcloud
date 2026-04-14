@@ -562,19 +562,6 @@ func (r *OVHMachineReconciler) ensureLBPoolMember(scope *MachineScope, instance 
 		return errors.New("OVHCluster.Status.PoolID not set yet")
 	}
 
-	// If we already recorded a member ID, check it still exists.
-	if scope.OVHMachine.Status.LBPoolMemberID != "" {
-		members, err := scope.OVHClient.ListPoolMembers(poolID)
-		if err == nil {
-			for i := range members {
-				if members[i].ID == scope.OVHMachine.Status.LBPoolMemberID {
-					return nil // already registered
-				}
-			}
-		}
-		// Member is gone (LB recreated, etc.) — fall through to re-add.
-	}
-
 	// Find the primary IPv4 private address.
 	var privateIP string
 
@@ -590,19 +577,37 @@ func (r *OVHMachineReconciler) ensureLBPoolMember(scope *MachineScope, instance 
 		return fmt.Errorf("no IPv4 private address on instance %s", instance.ID)
 	}
 
-	member, err := scope.OVHClient.AddPoolMember(poolID, ovhclient.CreateMemberOpts{
-		Name:         scope.Machine.Name,
-		Address:      privateIP,
-		ProtocolPort: 6443,
-		Weight:       1,
-	})
-	if err != nil {
-		return fmt.Errorf("adding pool member: %w", err)
+	// Idempotent check: skip add if a member at this address:6443 already
+	// exists in the pool (covers status patches dropped by apiserver, pod
+	// restarts mid-reconcile, etc.).
+	alreadyRegistered := false
+
+	if members, err := scope.OVHClient.ListPoolMembers(poolID); err == nil {
+		for i := range members {
+			if members[i].Address == privateIP && members[i].ProtocolPort == 6443 {
+				scope.OVHMachine.Status.LBPoolMemberID = members[i].ID
+				alreadyRegistered = true
+
+				break
+			}
+		}
 	}
 
-	scope.OVHMachine.Status.LBPoolMemberID = member.ID
-	(*scope.Logger).Info("Registered CP node as LB pool member",
-		"poolID", poolID, "memberID", member.ID, "address", privateIP)
+	if !alreadyRegistered {
+		member, err := scope.OVHClient.AddPoolMember(poolID, ovhclient.CreateMemberOpts{
+			Name:         scope.Machine.Name,
+			Address:      privateIP,
+			ProtocolPort: 6443,
+			Weight:       1,
+		})
+		if err != nil {
+			return fmt.Errorf("adding pool member: %w", err)
+		}
+
+		scope.OVHMachine.Status.LBPoolMemberID = member.ID
+		(*scope.Logger).Info("Registered CP node as LB pool member",
+			"poolID", poolID, "memberID", member.ID, "address", privateIP)
+	}
 
 	// Also register in the RKE2 supervisor (9345) pool so worker agents can
 	// reach the CP for CA fetch + registration. Discover the pool dynamically
