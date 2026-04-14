@@ -193,13 +193,14 @@ spec:
               valueFrom:
                 variable: sshKeyName
 
-    # Inject the kubelet provider-id snippet into preRKE2Commands with the
-    # cluster region baked in via Go template interpolation. OVH OpenStack
-    # metadata at 169.254.169.254 provides the instance UUID. Without this,
-    # RKE2 registers the Node with providerID "rke2://<hostname>" which
-    # does not match the OVHMachine providerID "ovhcloud://<region>/<uuid>",
-    # leaving CAPI unable to link Machine -> Node.
-    - name: cp-provider-id-cmd
+    # Write the cluster region to a file on each machine. The provider-id
+    # setup script in preRKE2Commands then reads this file at runtime and
+    # combines it with the instance UUID from OVH OpenStack metadata to
+    # build the correct kubelet --provider-id. This is required because
+    # CAPI links Machine -> Node by providerID; without it, RKE2 registers
+    # nodes with "rke2://<hostname>" which never matches OVHMachine's
+    # "ovhcloud://<region>/<uuid>".
+    - name: cp-region-file
       definitions:
         - selector:
             apiVersion: controlplane.cluster.x-k8s.io/v1beta1
@@ -208,18 +209,12 @@ spec:
               controlPlane: true
           jsonPatches:
             - op: add
-              path: /spec/template/spec/preRKE2Commands/-
+              path: /spec/template/spec/files
               valueFrom:
                 template: |
-                  set -e
-                  UUID=$(curl -sf http://169.254.169.254/openstack/latest/meta_data.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["uuid"])')
-                  mkdir -p /etc/rancher/rke2/config.yaml.d
-                  cat > /etc/rancher/rke2/config.yaml.d/90-provider-id.yaml <<EOF
-                  kubelet-arg:
-                    - "provider-id=ovhcloud://{{ .region }}/${UUID}"
-                  EOF
+                  [{"path":"/etc/capiovh/region","owner":"root:root","permissions":"0644","content":{{ .region | quote }}}]
 
-    - name: worker-provider-id-cmd
+    - name: worker-region-file
       definitions:
         - selector:
             apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
@@ -229,16 +224,10 @@ spec:
                 names: [default-worker]
           jsonPatches:
             - op: add
-              path: /spec/template/spec/preRKE2Commands/-
+              path: /spec/template/spec/files
               valueFrom:
                 template: |
-                  set -e
-                  UUID=$(curl -sf http://169.254.169.254/openstack/latest/meta_data.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["uuid"])')
-                  mkdir -p /etc/rancher/rke2/config.yaml.d
-                  cat > /etc/rancher/rke2/config.yaml.d/90-provider-id.yaml <<EOF
-                  kubelet-arg:
-                    - "provider-id=ovhcloud://{{ .region }}/${UUID}"
-                  EOF
+                  [{"path":"/etc/capiovh/region","owner":"root:root","permissions":"0644","content":{{ .region | quote }}}]
 
 ---
 # Templates referenced by the ClusterClass above.
@@ -327,6 +316,19 @@ spec:
             getent hosts github.com >/dev/null 2>&1 && break
             sleep 2
           done
+          # Configure kubelet --provider-id so the Node registers with the
+          # "ovhcloud://<region>/<uuid>" providerID that CAPI expects.
+          # REGION is written to /etc/capiovh/region by a ClusterClass
+          # JSONPatch; UUID comes from OVH OpenStack metadata.
+          REGION=$(cat /etc/capiovh/region 2>/dev/null)
+          UUID=$(curl -sf http://169.254.169.254/openstack/latest/meta_data.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["uuid"])' 2>/dev/null)
+          if [ -n "$REGION" ] && [ -n "$UUID" ]; then
+            mkdir -p /etc/rancher/rke2/config.yaml.d
+            cat > /etc/rancher/rke2/config.yaml.d/90-provider-id.yaml <<EOF
+          kubelet-arg:
+            - "provider-id=ovhcloud://${REGION}/${UUID}"
+          EOF
+          fi
       machineTemplate:
         infrastructureRef:
           apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
