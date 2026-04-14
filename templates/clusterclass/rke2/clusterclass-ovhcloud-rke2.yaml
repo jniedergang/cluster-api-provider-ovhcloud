@@ -193,6 +193,53 @@ spec:
               valueFrom:
                 variable: sshKeyName
 
+    # Inject the kubelet provider-id snippet into preRKE2Commands with the
+    # cluster region baked in via Go template interpolation. OVH OpenStack
+    # metadata at 169.254.169.254 provides the instance UUID. Without this,
+    # RKE2 registers the Node with providerID "rke2://<hostname>" which
+    # does not match the OVHMachine providerID "ovhcloud://<region>/<uuid>",
+    # leaving CAPI unable to link Machine -> Node.
+    - name: cp-provider-id-cmd
+      definitions:
+        - selector:
+            apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+            kind: RKE2ControlPlaneTemplate
+            matchResources:
+              controlPlane: true
+          jsonPatches:
+            - op: add
+              path: /spec/template/spec/preRKE2Commands/-
+              valueFrom:
+                template: |
+                  set -e
+                  UUID=$(curl -sf http://169.254.169.254/openstack/latest/meta_data.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["uuid"])')
+                  mkdir -p /etc/rancher/rke2/config.yaml.d
+                  cat > /etc/rancher/rke2/config.yaml.d/90-provider-id.yaml <<EOF
+                  kubelet-arg:
+                    - "provider-id=ovhcloud://{{ .region }}/${UUID}"
+                  EOF
+
+    - name: worker-provider-id-cmd
+      definitions:
+        - selector:
+            apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+            kind: RKE2ConfigTemplate
+            matchResources:
+              machineDeploymentClass:
+                names: [default-worker]
+          jsonPatches:
+            - op: add
+              path: /spec/template/spec/preRKE2Commands/-
+              valueFrom:
+                template: |
+                  set -e
+                  UUID=$(curl -sf http://169.254.169.254/openstack/latest/meta_data.json | python3 -c 'import json,sys;print(json.load(sys.stdin)["uuid"])')
+                  mkdir -p /etc/rancher/rke2/config.yaml.d
+                  cat > /etc/rancher/rke2/config.yaml.d/90-provider-id.yaml <<EOF
+                  kubelet-arg:
+                    - "provider-id=ovhcloud://{{ .region }}/${UUID}"
+                  EOF
+
 ---
 # Templates referenced by the ClusterClass above.
 
@@ -316,3 +363,6 @@ spec:
             getent hosts github.com >/dev/null 2>&1 && break
             sleep 2
           done
+        - |
+          # provider-id command injected by ClusterClass patch (region baked in)
+          true
