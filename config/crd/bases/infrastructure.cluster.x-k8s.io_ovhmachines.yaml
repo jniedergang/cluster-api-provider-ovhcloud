@@ -207,6 +207,11 @@ spec:
               ready:
                 description: Ready is true when the provider resource is ready.
                 type: boolean
+              registerPoolMemberID:
+                description: |-
+                  RegisterPoolMemberID is the ID of this machine's entry in the RKE2
+                  supervisor (port 9345) backend pool. Only CP machines populate it.
+                type: string
               volumeIDs:
                 description: VolumeIDs tracks attached additional volume IDs.
                 items:

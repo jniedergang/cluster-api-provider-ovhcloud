@@ -604,6 +604,26 @@ func (r *OVHMachineReconciler) ensureLBPoolMember(scope *MachineScope, instance 
 	(*scope.Logger).Info("Registered CP node as LB pool member",
 		"poolID", poolID, "memberID", member.ID, "address", privateIP)
 
+	// Also register in the RKE2 supervisor (9345) pool if it exists, so
+	// worker agents can reach the CP for CA fetch + registration.
+	if regPoolID := scope.OVHCluster.Status.RegisterPoolID; regPoolID != "" &&
+		scope.OVHMachine.Status.RegisterPoolMemberID == "" {
+		regMember, err := scope.OVHClient.AddPoolMember(regPoolID, ovhclient.CreateMemberOpts{
+			Name:         scope.Machine.Name,
+			Address:      privateIP,
+			ProtocolPort: 9345,
+			Weight:       1,
+		})
+		if err != nil {
+			(*scope.Logger).Info("Warning: failed to register CP in RKE2 supervisor pool",
+				"error", err)
+		} else {
+			scope.OVHMachine.Status.RegisterPoolMemberID = regMember.ID
+			(*scope.Logger).Info("Registered CP node as RKE2 supervisor pool member",
+				"poolID", regPoolID, "memberID", regMember.ID)
+		}
+	}
+
 	return nil
 }
 

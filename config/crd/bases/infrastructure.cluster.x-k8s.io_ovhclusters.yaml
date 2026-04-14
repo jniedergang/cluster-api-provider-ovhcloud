@@ -276,6 +276,16 @@ spec:
                 description: Ready describes if the OVH cluster infrastructure is
                   ready for machine creation.
                 type: boolean
+              registerListenerID:
+                description: |-
+                  RegisterListenerID is the ID of the RKE2 supervisor (port 9345)
+                  listener on the load balancer. Only populated for RKE2-based clusters.
+                type: string
+              registerPoolID:
+                description: |-
+                  RegisterPoolID is the ID of the backend pool for the RKE2 supervisor
+                  port on the load balancer.
+                type: string
               subnetID:
                 description: SubnetID is the ID of the subnet being used.
                 type: string

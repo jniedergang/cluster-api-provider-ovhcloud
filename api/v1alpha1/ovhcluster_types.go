@@ -223,6 +223,16 @@ type OVHClusterStatus struct {
 	// connectivity for instances on the subnet.
 	// +optional
 	GatewayExposed bool `json:"gatewayExposed,omitempty"`
+
+	// RegisterListenerID is the ID of the RKE2 supervisor (port 9345)
+	// listener on the load balancer. Only populated for RKE2-based clusters.
+	// +optional
+	RegisterListenerID string `json:"registerListenerID,omitempty"`
+
+	// RegisterPoolID is the ID of the backend pool for the RKE2 supervisor
+	// port on the load balancer.
+	// +optional
+	RegisterPoolID string `json:"registerPoolID,omitempty"`
 }
 
 //+kubebuilder:object:root=true

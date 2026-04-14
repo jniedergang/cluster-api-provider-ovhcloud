@@ -136,6 +136,11 @@ type OVHMachineStatus struct {
 	// pool of the parent OVHCluster (set only for control-plane machines).
 	// +optional
 	LBPoolMemberID string `json:"lbPoolMemberID,omitempty"`
+
+	// RegisterPoolMemberID is the ID of this machine's entry in the RKE2
+	// supervisor (port 9345) backend pool. Only CP machines populate it.
+	// +optional
+	RegisterPoolMemberID string `json:"registerPoolMemberID,omitempty"`
 }
 
 //+kubebuilder:object:root=true
