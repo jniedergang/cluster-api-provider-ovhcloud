@@ -947,6 +947,26 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 	logger := scope.Logger
 	logger.Info("Reconciling OVHCluster deletion ...")
 
+	// Capture all FIPs associated with our LB BEFORE we delete the LB:
+	// once the LB is gone, the FIPs are detached and we lose the reverse link.
+	var fipsToDelete []string
+	if scope.OVHCluster.Status.FloatingIPID != "" {
+		fipsToDelete = append(fipsToDelete, scope.OVHCluster.Status.FloatingIPID)
+	}
+
+	if scope.OVHCluster.Status.LoadBalancerID != "" {
+		if fips, err := scope.OVHClient.ListFloatingIPs(); err == nil {
+			for i := range fips {
+				if fips[i].AssociatedEntity != nil &&
+					fips[i].AssociatedEntity.ID == scope.OVHCluster.Status.LoadBalancerID {
+					if !slices.Contains(fipsToDelete, fips[i].ID) {
+						fipsToDelete = append(fipsToDelete, fips[i].ID)
+					}
+				}
+			}
+		}
+	}
+
 	// Delete LB
 	if scope.OVHCluster.Status.LoadBalancerID != "" {
 		// Delete pool members, pool, listener, then LB
@@ -990,27 +1010,7 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 		}
 	}
 
-	// Delete floating IP if allocated. Try Status first, then fall back to
-	// listing FIPs and matching the one associated with our LB ID, in case
-	// Status.FloatingIPID was dropped by an apiserver schema cache lag.
-	fipsToDelete := []string{}
-	if scope.OVHCluster.Status.FloatingIPID != "" {
-		fipsToDelete = append(fipsToDelete, scope.OVHCluster.Status.FloatingIPID)
-	}
-
-	if scope.OVHCluster.Status.LoadBalancerID != "" {
-		if fips, err := scope.OVHClient.ListFloatingIPs(); err == nil {
-			for i := range fips {
-				if fips[i].AssociatedEntity != nil &&
-					fips[i].AssociatedEntity.ID == scope.OVHCluster.Status.LoadBalancerID {
-					if !slices.Contains(fipsToDelete, fips[i].ID) {
-						fipsToDelete = append(fipsToDelete, fips[i].ID)
-					}
-				}
-			}
-		}
-	}
-
+	// Delete floating IPs we captured before LB deletion.
 	for _, fipID := range fipsToDelete {
 		logger.Info("Deleting floating IP", "fipID", fipID)
 
