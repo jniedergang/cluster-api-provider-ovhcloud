@@ -118,7 +118,7 @@ Status legend: ✅ passed live | ⚠️ passed with caveat | ❌ blocked | ⏳ p
 | 11 | Etcd snapshot + restore                               | ⏳      | —               | RKE2 takes scheduled snapshots; validate disaster recovery |
 | 12 | PVC via OVH block storage CSI                         | ⏳      | —               | No CSI installed today; gap report for v0.3.0 |
 | 13 | Service type=LoadBalancer via cloud-controller        | ⏳      | —               | No CCM-OVH today; gap report for v0.3.0 |
-| 14 | Multi-cluster simultaneous delete + cleanup           | ⏳      | —               | Stress the cleanup path under parallelism |
+| 14 | Multi-cluster simultaneous delete + cleanup           | ⚠️      | v0.2.1          | Both clusters fully cascade (CRs gone, instances/LBs cleaned) but FIP retry loop still hits the OVH async-DELETE quirk: status reports `down` while the resource lingers. Manual `ovh DELETE /floatingip/{id}` is needed to expedite. Same root cause as the FIP cleanup limitation tracked under v0.3.0 |
 | 15 | Scheduler stress (50-pod deployment)                  | ⏳      | —               | Pod CIDR / etcd write throughput sanity |
 | 16 | BYOI image (custom snapshot)                          | ⏳      | —               | Code path exists in `pkg/ovh.GetImageByName`, never live-tested |
 | 17 | 24 h soak (no leak, no OOMKilled, certs stable)       | ⏳      | —               | Long-running observability via Grafana |
