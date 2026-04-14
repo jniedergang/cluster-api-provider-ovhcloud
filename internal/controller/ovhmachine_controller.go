@@ -35,11 +35,14 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/conditions"
+	"sigs.k8s.io/cluster-api/util/kubeconfig"
 	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/cluster-api/util/predicates"
 
@@ -382,6 +385,19 @@ func (r *OVHMachineReconciler) handleExistingInstance(scope *MachineScope, insta
 				"error", err)
 		}
 
+		// Patch the providerID on the workload cluster node so CAPI can link
+		// Machine -> Node. RKE2 registers nodes with "rke2://<hostname>" by
+		// default; without this patch CAPI MachineDeployments stay stuck in
+		// ScalingUp/Unavailable even though nodes are Ready.
+		// Best-effort: no-op if the workload kubeconfig isn't available yet
+		// or if the node hasn't joined — will retry on next reconcile.
+		if cfg, cfgErr := r.getWorkloadRESTConfig(scope); cfgErr == nil && cfg != nil {
+			locutil.InitializeWorkloadNode(scope.Ctx, logger, cfg, instance.Name,
+				scope.OVHMachine.Spec.ProviderID)
+		} else if cfgErr != nil {
+			logger.V(1).Info("Workload kubeconfig not yet available for node init", "error", cfgErr)
+		}
+
 		return ctrl.Result{}, nil
 
 	case ovhclient.InstanceStatusBuild:
@@ -545,6 +561,35 @@ func (r *OVHMachineReconciler) getBootstrapData(scope *MachineScope) ([]byte, er
 	}
 
 	return data, nil
+}
+
+// getWorkloadRESTConfig returns a rest.Config for the workload cluster
+// associated with the given MachineScope, by reading the CAPI-generated
+// kubeconfig Secret from the management cluster. Returns (nil, nil) if the
+// secret does not yet exist.
+func (r *OVHMachineReconciler) getWorkloadRESTConfig(scope *MachineScope) (*rest.Config, error) {
+	if r.Client == nil || scope.Cluster == nil {
+		return nil, nil
+	}
+
+	data, err := kubeconfig.FromSecret(scope.Ctx, r.Client, client.ObjectKey{
+		Namespace: scope.Cluster.Namespace,
+		Name:      scope.Cluster.Name,
+	})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("reading kubeconfig secret: %w", err)
+	}
+
+	cfg, err := clientcmd.RESTConfigFromKubeConfig(data)
+	if err != nil {
+		return nil, fmt.Errorf("parsing kubeconfig: %w", err)
+	}
+
+	return cfg, nil
 }
 
 // ensureLBPoolMember registers a CP machine's primary private IP as a member
