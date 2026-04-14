@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -845,10 +846,8 @@ func (c *Client) FindListenerByName(lbID, name string) (*Listener, error) {
 			continue
 		}
 
-		for _, id := range listeners[i].LoadBalancerIDs {
-			if id == lbID {
-				return &listeners[i], nil
-			}
+		if slices.Contains(listeners[i].LoadBalancerIDs, lbID) {
+			return &listeners[i], nil
 		}
 	}
 

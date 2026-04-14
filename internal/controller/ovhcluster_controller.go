@@ -603,19 +603,17 @@ func (r *OVHClusterReconciler) handleExistingLB(scope *ClusterScope, lb *ovhclie
 	// LB is ACTIVE — ensure listener and pool exist for the API server
 	// (port 6443) and for RKE2 supervisor (port 9345, used for worker node
 	// registration).
-	if err := r.reconcileLBListener(scope); err != nil {
+	if err := r.reconcileLBPort(scope,
+		apiServerListenerName, apiServerLBPort,
+		&scope.OVHCluster.Status.ListenerID, &scope.OVHCluster.Status.PoolID,
+	); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileLBPool(scope); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.reconcileRKE2RegisterListener(scope); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.reconcileRKE2RegisterPool(scope); err != nil {
+	if err := r.reconcileLBPort(scope,
+		rke2RegisterListenerName, rke2RegisterLBPort,
+		&scope.OVHCluster.Status.RegisterListenerID, &scope.OVHCluster.Status.RegisterPoolID,
+	); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -820,169 +818,73 @@ func (r *OVHClusterReconciler) ensureGatewayExposed(scope *ClusterScope) error {
 	return nil
 }
 
-// reconcileLBListener ensures the API server listener exists on the LB.
-// Idempotent: if a listener with the expected name already exists (e.g. from
-// a previous reconcile where the status patch didn't persist), adopt it.
-func (r *OVHClusterReconciler) reconcileLBListener(scope *ClusterScope) error {
-	if scope.OVHCluster.Status.ListenerID != "" {
-		return nil
-	}
-
+// reconcileLBPort ensures the listener + backend pool + health monitor for
+// a single TCP port (e.g. 6443 for kube-apiserver, 9345 for RKE2 supervisor)
+// exist on the LB. All operations are idempotent: missing-status fields are
+// recovered via Find*ByName, and the health monitor is reattached on every
+// reconcile to absorb the OVH "pool immutable" race that locks the pool ~1 s
+// after creation.
+func (r *OVHClusterReconciler) reconcileLBPort(
+	scope *ClusterScope,
+	listenerName string,
+	port int32,
+	listenerIDPtr, poolIDPtr *string,
+) error {
 	logger := scope.Logger
 	lbID := scope.OVHCluster.Status.LoadBalancerID
 
-	existing, err := scope.OVHClient.FindListenerByName(lbID, apiServerListenerName)
-	if err != nil {
-		return fmt.Errorf("looking up api-server listener: %w", err)
+	if *listenerIDPtr == "" {
+		existing, err := scope.OVHClient.FindListenerByName(lbID, listenerName)
+		if err != nil {
+			return fmt.Errorf("looking up %s listener: %w", listenerName, err)
+		}
+		if existing != nil {
+			logger.Info("Adopting existing listener", "name", listenerName, "listenerID", existing.ID)
+			*listenerIDPtr = existing.ID
+		} else {
+			logger.Info("Creating listener on LB", "name", listenerName, "port", port)
+			listener, err := scope.OVHClient.CreateListener(ovhclient.CreateListenerOpts{
+				Name:           listenerName,
+				Protocol:       apiServerProtocol,
+				Port:           port,
+				LoadBalancerID: lbID,
+			})
+			if err != nil {
+				return fmt.Errorf("creating %s listener: %w", listenerName, err)
+			}
+			*listenerIDPtr = listener.ID
+			logger.Info("Listener created", "name", listenerName, "listenerID", listener.ID)
+		}
 	}
 
-	if existing != nil {
-		logger.Info("Adopting existing API server listener", "listenerID", existing.ID)
-		scope.OVHCluster.Status.ListenerID = existing.ID
-
-		return nil
-	}
-
-	logger.Info("Creating API server listener on LB")
-
-	listener, err := scope.OVHClient.CreateListener(ovhclient.CreateListenerOpts{
-		Name:           apiServerListenerName,
-		Protocol:       apiServerProtocol,
-		Port:           apiServerLBPort,
-		LoadBalancerID: lbID,
-	})
-	if err != nil {
-		return fmt.Errorf("creating listener: %w", err)
-	}
-
-	scope.OVHCluster.Status.ListenerID = listener.ID
-	logger.Info("Listener created", "listenerID", listener.ID)
-
-	return nil
-}
-
-// reconcileLBPool ensures the backend pool exists on the LB. Idempotent.
-// Also ensures a TCP health monitor is attached on EVERY reconcile (the
-// HM POST often races OVH's pool lock and needs to be retried on a later
-// reconcile — FindHealthMonitorByName makes this a no-op once it exists).
-func (r *OVHClusterReconciler) reconcileLBPool(scope *ClusterScope) error {
-	logger := scope.Logger
-	lbID := scope.OVHCluster.Status.LoadBalancerID
-	poolName := apiServerListenerName + "-pool"
-
-	if scope.OVHCluster.Status.PoolID == "" {
+	poolName := listenerName + "-pool"
+	if *poolIDPtr == "" {
 		existing, err := scope.OVHClient.FindPoolByName(lbID, poolName)
 		if err != nil {
-			return fmt.Errorf("looking up api-server pool: %w", err)
+			return fmt.Errorf("looking up %s pool: %w", poolName, err)
 		}
-
 		if existing != nil {
-			logger.Info("Adopting existing API server pool", "poolID", existing.ID)
-			scope.OVHCluster.Status.PoolID = existing.ID
+			logger.Info("Adopting existing pool", "name", poolName, "poolID", existing.ID)
+			*poolIDPtr = existing.ID
 		} else {
-			logger.Info("Creating backend pool on LB")
-
+			logger.Info("Creating backend pool on LB", "name", poolName)
 			pool, err := scope.OVHClient.CreatePool(ovhclient.CreatePoolOpts{
 				Name:           poolName,
 				Protocol:       apiServerProtocol,
 				Algorithm:      lbAlgorithm,
-				ListenerID:     scope.OVHCluster.Status.ListenerID,
+				ListenerID:     *listenerIDPtr,
 				LoadBalancerID: lbID,
 			})
 			if err != nil {
-				return fmt.Errorf("creating pool: %w", err)
+				return fmt.Errorf("creating %s pool: %w", poolName, err)
 			}
-
-			scope.OVHCluster.Status.PoolID = pool.ID
-			logger.Info("Pool created", "poolID", pool.ID)
+			*poolIDPtr = pool.ID
+			logger.Info("Pool created", "name", poolName, "poolID", pool.ID)
 		}
 	}
 
-	if err := r.ensurePoolHealthMonitor(scope, scope.OVHCluster.Status.PoolID, poolName); err != nil {
-		logger.Info("Warning: failed to attach health monitor to api-server pool, will retry", "error", err)
-	}
-
-	return nil
-}
-
-// reconcileRKE2RegisterListener ensures the RKE2 supervisor (port 9345)
-// listener exists on the LB so worker nodes can register with the cluster.
-// Idempotent via FindListenerByName.
-func (r *OVHClusterReconciler) reconcileRKE2RegisterListener(scope *ClusterScope) error {
-	if scope.OVHCluster.Status.RegisterListenerID != "" {
-		return nil
-	}
-
-	logger := scope.Logger
-	lbID := scope.OVHCluster.Status.LoadBalancerID
-
-	existing, err := scope.OVHClient.FindListenerByName(lbID, rke2RegisterListenerName)
-	if err != nil {
-		return fmt.Errorf("looking up rke2-register listener: %w", err)
-	}
-
-	if existing != nil {
-		logger.Info("Adopting existing RKE2 supervisor listener", "listenerID", existing.ID)
-		scope.OVHCluster.Status.RegisterListenerID = existing.ID
-
-		return nil
-	}
-
-	logger.Info("Creating RKE2 supervisor (9345) listener on LB")
-
-	listener, err := scope.OVHClient.CreateListener(ovhclient.CreateListenerOpts{
-		Name:           rke2RegisterListenerName,
-		Protocol:       apiServerProtocol,
-		Port:           rke2RegisterLBPort,
-		LoadBalancerID: lbID,
-	})
-	if err != nil {
-		return fmt.Errorf("creating RKE2 supervisor listener: %w", err)
-	}
-
-	scope.OVHCluster.Status.RegisterListenerID = listener.ID
-	logger.Info("RKE2 supervisor listener created", "listenerID", listener.ID)
-
-	return nil
-}
-
-// reconcileRKE2RegisterPool ensures the backend pool for the RKE2 supervisor
-// port exists on the LB. Idempotent. HM attached on every reconcile.
-func (r *OVHClusterReconciler) reconcileRKE2RegisterPool(scope *ClusterScope) error {
-	logger := scope.Logger
-	lbID := scope.OVHCluster.Status.LoadBalancerID
-	poolName := rke2RegisterListenerName + "-pool"
-
-	if scope.OVHCluster.Status.RegisterPoolID == "" {
-		existing, err := scope.OVHClient.FindPoolByName(lbID, poolName)
-		if err != nil {
-			return fmt.Errorf("looking up rke2-register pool: %w", err)
-		}
-
-		if existing != nil {
-			logger.Info("Adopting existing RKE2 supervisor pool", "poolID", existing.ID)
-			scope.OVHCluster.Status.RegisterPoolID = existing.ID
-		} else {
-			logger.Info("Creating RKE2 supervisor backend pool on LB")
-
-			pool, err := scope.OVHClient.CreatePool(ovhclient.CreatePoolOpts{
-				Name:           poolName,
-				Protocol:       apiServerProtocol,
-				Algorithm:      lbAlgorithm,
-				ListenerID:     scope.OVHCluster.Status.RegisterListenerID,
-				LoadBalancerID: lbID,
-			})
-			if err != nil {
-				return fmt.Errorf("creating RKE2 supervisor pool: %w", err)
-			}
-
-			scope.OVHCluster.Status.RegisterPoolID = pool.ID
-			logger.Info("RKE2 supervisor pool created", "poolID", pool.ID)
-		}
-	}
-
-	if err := r.ensurePoolHealthMonitor(scope, scope.OVHCluster.Status.RegisterPoolID, poolName); err != nil {
-		logger.Info("Warning: failed to attach health monitor to rke2-register pool, will retry", "error", err)
+	if err := r.ensurePoolHealthMonitor(scope, *poolIDPtr, poolName); err != nil {
+		logger.Info("Warning: failed to attach health monitor, will retry", "pool", poolName, "error", err)
 	}
 
 	return nil
@@ -1098,46 +1000,7 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 		}
 	}
 
-	// Delete floating IPs we captured before LB deletion.
-	// Two OVH quirks here:
-	//   1. If the LB is in PENDING_DELETE, the first DeleteFloatingIP call
-	//      "succeeds" (200 OK) but only DETACHES the FIP without removing it.
-	//      A subsequent call deletes it once the LB is fully gone.
-	//   2. After the FIP is fully detached (status: down, associatedEntity:
-	//      nil), DeleteFloatingIP returns 200 and OVH schedules an async
-	//      removal. Subsequent GET will keep returning the "down" resource
-	//      for several minutes. Treat that state as "deleted from CAPI's
-	//      POV" — the OVH backend will reap it eventually and the resource
-	//      no longer blocks any of our other cleanup steps.
-	requeueForFIP := false
-
-	for _, fipID := range fipsToDelete {
-		logger.Info("Deleting floating IP", "fipID", fipID)
-
-		if err := scope.OVHClient.DeleteFloatingIP(fipID); err != nil {
-			logger.Error(err, "failed to delete floating IP", "fipID", fipID)
-		}
-
-		fip, gerr := scope.OVHClient.GetFloatingIP(fipID)
-		if gerr != nil || fip == nil {
-			continue // gone for real
-		}
-
-		// Detached + down → OVH already accepted the delete, just async.
-		// Don't keep requeueing.
-		if fip.AssociatedEntity == nil && fip.Status == "down" {
-			logger.Info("Floating IP detached and down; OVH will reap async, treating as deleted",
-				"fipID", fipID)
-			continue
-		}
-
-		// Still attached / still active → real retry needed.
-		logger.Info("Floating IP still present after delete; will retry",
-			"fipID", fipID, "status", fip.Status)
-		requeueForFIP = true
-	}
-
-	if requeueForFIP {
+	if r.cleanupFloatingIPs(scope, fipsToDelete) {
 		return ctrl.Result{RequeueAfter: requeueTimeShort}, nil
 	}
 
@@ -1179,4 +1042,46 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 	controllerutil.RemoveFinalizer(scope.OVHCluster, infrav1.ClusterFinalizer)
 
 	return ctrl.Result{}, nil
+}
+
+// cleanupFloatingIPs deletes the captured FIPs and returns true if at least
+// one is still genuinely present (caller should requeue).
+//
+// Two OVH quirks handled here:
+//  1. If the LB is in PENDING_DELETE, the first DeleteFloatingIP "succeeds"
+//     (200 OK) but only DETACHES the FIP. A subsequent call deletes it once
+//     the LB is fully gone.
+//  2. After full detach (status: down, associatedEntity: nil),
+//     DeleteFloatingIP returns 200 and OVH schedules an async removal.
+//     Subsequent GET keeps returning the "down" resource for several
+//     minutes. Treat that state as deleted from CAPI's POV — OVH reaps it
+//     eventually and it no longer blocks other cleanup steps.
+func (r *OVHClusterReconciler) cleanupFloatingIPs(scope *ClusterScope, fipsToDelete []string) bool {
+	logger := scope.Logger
+	requeue := false
+
+	for _, fipID := range fipsToDelete {
+		logger.Info("Deleting floating IP", "fipID", fipID)
+
+		if err := scope.OVHClient.DeleteFloatingIP(fipID); err != nil {
+			logger.Error(err, "failed to delete floating IP", "fipID", fipID)
+		}
+
+		fip, gerr := scope.OVHClient.GetFloatingIP(fipID)
+		if gerr != nil || fip == nil {
+			continue // gone for real
+		}
+
+		if fip.AssociatedEntity == nil && fip.Status == "down" {
+			logger.Info("Floating IP detached and down; OVH will reap async, treating as deleted",
+				"fipID", fipID)
+			continue
+		}
+
+		logger.Info("Floating IP still present after delete; will retry",
+			"fipID", fipID, "status", fip.Status)
+		requeue = true
+	}
+
+	return requeue
 }
