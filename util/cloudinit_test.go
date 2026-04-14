@@ -17,7 +17,6 @@ limitations under the License.
 package util
 
 import (
-	"encoding/base64"
 	"testing"
 )
 
@@ -29,14 +28,8 @@ func TestPrepareUserData(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify it's valid base64
-	decoded, err := base64.StdEncoding.DecodeString(result)
-	if err != nil {
-		t.Fatalf("result is not valid base64: %v", err)
-	}
-
-	if string(decoded) != string(input) {
-		t.Errorf("roundtrip failed: got %q, want %q", string(decoded), string(input))
+	if result != string(input) {
+		t.Errorf("expected passthrough, got %q, want %q", result, string(input))
 	}
 }
 
@@ -48,7 +41,6 @@ func TestPrepareUserData_Empty(t *testing.T) {
 }
 
 func TestPrepareUserData_CloudInit(t *testing.T) {
-	// Simulate a real cloud-init script
 	cloudInit := `#cloud-config
 runcmd:
   - curl -sfL https://get.rke2.io | INSTALL_RKE2_TYPE=server sh -
@@ -61,13 +53,7 @@ runcmd:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Decode and verify
-	decoded, err := base64.StdEncoding.DecodeString(result)
-	if err != nil {
-		t.Fatalf("not valid base64: %v", err)
-	}
-
-	if string(decoded) != cloudInit {
-		t.Error("cloud-init content not preserved after encode/decode roundtrip")
+	if result != cloudInit {
+		t.Error("cloud-init content not preserved as-is")
 	}
 }

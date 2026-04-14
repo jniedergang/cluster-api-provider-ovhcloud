@@ -17,21 +17,21 @@ limitations under the License.
 package util
 
 import (
-	"encoding/base64"
 	"errors"
 )
 
-// PrepareUserData reads the bootstrap data secret value and prepares it
-// for use as OVH instance userData. OVH expects the userData to be a
-// base64-encoded cloud-init script passed in the instance creation request.
+// PrepareUserData validates the bootstrap data from CAPI and returns it as a
+// string suitable for use as OVH instance userData in the instance creation
+// request.
 //
-// The bootstrap data from CAPI is already the cloud-init content (not base64).
-// OVH API may accept it as-is or base64-encoded depending on the endpoint version.
+// OVH's metadata service delivers userData verbatim to the instance, so we
+// must send the raw cloud-init YAML (the bootstrap data from CAPI is already
+// in that format). Base64-encoding here would double-wrap the content and
+// cloud-init would fail with "Unhandled non-multipart userdata".
 func PrepareUserData(bootstrapData []byte) (string, error) {
 	if len(bootstrapData) == 0 {
 		return "", errors.New("bootstrap data is empty")
 	}
 
-	// OVH instance creation API accepts base64-encoded userData
-	return base64.StdEncoding.EncodeToString(bootstrapData), nil
+	return string(bootstrapData), nil
 }
