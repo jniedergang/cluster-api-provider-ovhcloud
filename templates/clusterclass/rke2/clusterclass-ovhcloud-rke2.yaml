@@ -212,7 +212,10 @@ spec:
               path: /spec/template/spec/files
               valueFrom:
                 template: |
-                  [{"path":"/etc/capiovh/region","owner":"root:root","permissions":"0644","content":{{ .region | quote }}}]
+                  [
+                    {"path":"/etc/capiovh/region","owner":"root:root","permissions":"0644","content":{{ .region | quote }}},
+                    {"path":"/etc/rancher/rke2/config.yaml.d/10-cidrs.yaml","owner":"root:root","permissions":"0644","content":"cluster-cidr: 10.244.0.0/16\nservice-cidr: 10.96.0.0/16\ncluster-dns: 10.96.0.10\n"}
+                  ]
 
     - name: worker-region-file
       definitions:
