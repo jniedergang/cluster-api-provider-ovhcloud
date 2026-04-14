@@ -1083,6 +1083,20 @@ func (c *Client) DeleteVolume(volumeID string) error {
 
 // --- Floating IP Operations ---
 
+// ListFloatingIPs returns all floating IPs in the current region.
+func (c *Client) ListFloatingIPs() ([]FloatingIP, error) {
+	var fips []FloatingIP
+
+	err := c.retryWithBackoff("ListFloatingIPs", func() error {
+		return c.api.Get(c.regionPath("/floatingip"), &fips)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing floating IPs: %w", err)
+	}
+
+	return fips, nil
+}
+
 // GetFloatingIP retrieves a floating IP by ID.
 func (c *Client) GetFloatingIP(fipID string) (*FloatingIP, error) {
 	var fip FloatingIP

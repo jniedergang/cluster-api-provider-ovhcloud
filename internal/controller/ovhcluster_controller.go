@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -989,13 +990,32 @@ func (r *OVHClusterReconciler) ReconcileDelete(scope *ClusterScope) (reconcile.R
 		}
 	}
 
-	// Delete floating IP if allocated. Discover by name as fallback in case
+	// Delete floating IP if allocated. Try Status first, then fall back to
+	// listing FIPs and matching the one associated with our LB ID, in case
 	// Status.FloatingIPID was dropped by an apiserver schema cache lag.
+	fipsToDelete := []string{}
 	if scope.OVHCluster.Status.FloatingIPID != "" {
-		logger.Info("Deleting floating IP", "fipID", scope.OVHCluster.Status.FloatingIPID)
+		fipsToDelete = append(fipsToDelete, scope.OVHCluster.Status.FloatingIPID)
+	}
 
-		if err := scope.OVHClient.DeleteFloatingIP(scope.OVHCluster.Status.FloatingIPID); err != nil {
-			logger.Error(err, "failed to delete floating IP")
+	if scope.OVHCluster.Status.LoadBalancerID != "" {
+		if fips, err := scope.OVHClient.ListFloatingIPs(); err == nil {
+			for i := range fips {
+				if fips[i].AssociatedEntity != nil &&
+					fips[i].AssociatedEntity.ID == scope.OVHCluster.Status.LoadBalancerID {
+					if !slices.Contains(fipsToDelete, fips[i].ID) {
+						fipsToDelete = append(fipsToDelete, fips[i].ID)
+					}
+				}
+			}
+		}
+	}
+
+	for _, fipID := range fipsToDelete {
+		logger.Info("Deleting floating IP", "fipID", fipID)
+
+		if err := scope.OVHClient.DeleteFloatingIP(fipID); err != nil {
+			logger.Error(err, "failed to delete floating IP", "fipID", fipID)
 		}
 	}
 

@@ -323,11 +323,21 @@ type addPoolMembersRequest struct {
 
 // FloatingIP represents a floating IP resource.
 type FloatingIP struct {
-	ID               string `json:"id"`
-	IP               string `json:"ip"`
-	Status           string `json:"status"`
-	AssociatedEntity string `json:"associatedEntity,omitempty"`
-	Region           string `json:"region,omitempty"`
+	ID               string                 `json:"id"`
+	IP               string                 `json:"ip"`
+	Status           string                 `json:"status"`
+	AssociatedEntity *FloatingIPAssociation `json:"associatedEntity,omitempty"`
+	Region           string                 `json:"region,omitempty"`
+	NetworkID        string                 `json:"networkId,omitempty"`
+}
+
+// FloatingIPAssociation describes what a floating IP is currently attached to
+// (instance / loadbalancer) and the underlying gateway.
+type FloatingIPAssociation struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"` // "loadbalancer" or "instance"
+	IP        string `json:"ip,omitempty"`
+	GatewayID string `json:"gatewayId,omitempty"`
 }
 
 // Gateway represents an OVH internet gateway attached to a private subnet.
