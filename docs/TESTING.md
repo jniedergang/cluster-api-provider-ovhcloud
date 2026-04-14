@@ -113,7 +113,7 @@ Status legend: ✅ passed live | ⚠️ passed with caveat | ❌ blocked | ⏳ p
 | 6  | MachineHealthCheck remediation (delete worker)        | ✅      | v0.2.0          | Net 30 s after drain unblocks; needs PDB on single-replica addons |
 | 7  | k8s in-place upgrade (v1.32.4 → v1.33.10)             | ✅      | v0.2.0          | ~9 min total; ~30 s API window on single-CP swap |
 | 8  | Multi-cluster in same OVH project                     | ✅      | v0.2.1          | Requires distinct `vlanID` topology variable per cluster |
-| 9  | Webhook validation rejects bad input                  | ⏳      | —               | Negative paths: invalid CIDR, missing flavorName, empty sshKey |
+| 9  | Webhook + CRD validation rejects bad input            | ✅      | v0.2.1          | 16/16 cases via `test/e2e/run-validation-tests.sh`. Found CRD apply quirk: `kubectl apply` may not always propagate new properties — use `kubectl replace` to refresh schema |
 | 10 | HA control-plane survives 1 CP failure                | ⏳      | —               | Force-delete one of 3 CP machines, etcd quorum continues |
 | 11 | Etcd snapshot + restore                               | ⏳      | —               | RKE2 takes scheduled snapshots; validate disaster recovery |
 | 12 | PVC via OVH block storage CSI                         | ⏳      | —               | No CSI installed today; gap report for v0.3.0 |
