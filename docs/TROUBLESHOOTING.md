@@ -226,8 +226,8 @@ Workarounds until the controller adds a health monitor:
 * For external clients: implement client-side retry on 5xx / network
   errors.
 
-Tracked in v0.3.0 — see https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/issues
-("Add LB health monitor on api-server-pool / rke2-register-pool").
+**Resolved in v0.2.2**: LB pool health monitors are now enabled by
+default (TCP, delay 5s, timeout 3s, max 2 retries).
 
 ### Rancher integration: cattle-cluster-agent needs serverca
 

@@ -19,12 +19,22 @@ spec:
       name: ovhcloud-rke2-control-plane
     machineInfrastructure:
       ref:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
         kind: OVHMachineTemplate
         name: ovhcloud-rke2-control-plane
+    machineHealthCheck:
+      maxUnhealthy: "34%"
+      nodeStartupTimeout: 20m
+      unhealthyConditions:
+        - type: Ready
+          status: "False"
+          timeout: 5m
+        - type: Ready
+          status: Unknown
+          timeout: 5m
   infrastructure:
     ref:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
       kind: OVHClusterTemplate
       name: ovhcloud-rke2-cluster
   workers:
@@ -38,9 +48,19 @@ spec:
               name: ovhcloud-rke2-worker
           infrastructure:
             ref:
-              apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+              apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
               kind: OVHMachineTemplate
               name: ovhcloud-rke2-worker
+        machineHealthCheck:
+          maxUnhealthy: "34%"
+          nodeStartupTimeout: 20m
+          unhealthyConditions:
+            - type: Ready
+              status: "False"
+              timeout: 5m
+            - type: Ready
+              status: Unknown
+              timeout: 5m
 
   # --- Variables exposed to the Cluster ---
   variables:
@@ -141,7 +161,7 @@ spec:
     - name: ovh-cluster-spec
       definitions:
         - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
             kind: OVHClusterTemplate
             matchResources:
               infrastructureCluster: true
@@ -186,7 +206,7 @@ spec:
     - name: cp-machine-flavor
       definitions:
         - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
             kind: OVHMachineTemplate
             matchResources:
               controlPlane: true
@@ -207,7 +227,7 @@ spec:
     - name: worker-machine-flavor
       definitions:
         - selector:
-            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
             kind: OVHMachineTemplate
             matchResources:
               machineDeploymentClass:
@@ -271,7 +291,7 @@ spec:
 ---
 # Templates referenced by the ClusterClass above.
 
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHClusterTemplate
 metadata:
   name: ovhcloud-rke2-cluster
@@ -288,7 +308,7 @@ spec:
         subnetCIDR: PLACEHOLDER # patched
       sshKeyName: PLACEHOLDER   # patched
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   name: ovhcloud-rke2-control-plane
@@ -299,7 +319,7 @@ spec:
       imageName: PLACEHOLDER
       sshKeyName: PLACEHOLDER
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   name: ovhcloud-rke2-worker
@@ -376,7 +396,7 @@ spec:
           fi
       machineTemplate:
         infrastructureRef:
-          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
           kind: OVHMachineTemplate
           name: ovhcloud-rke2-control-plane
 ---

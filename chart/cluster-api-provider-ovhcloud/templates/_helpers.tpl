@@ -37,7 +37,7 @@ helm.sh/chart: {{ include "capiovh.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 cluster.x-k8s.io/provider: infrastructure-ovhcloud
-cluster.x-k8s.io/v1beta1: v1alpha1
+cluster.x-k8s.io/v1beta1: v1alpha2
 {{- end -}}
 
 {{/*

@@ -14,11 +14,11 @@ spec:
     kind: RKE2ControlPlane
     name: ${CLUSTER_NAME}-control-plane
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
     kind: OVHCluster
     name: ${CLUSTER_NAME}-ovh
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHCluster
 metadata:
   name: ${CLUSTER_NAME}-ovh
@@ -70,7 +70,7 @@ spec:
       maxSurge: 1
   machineTemplate:
     infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
       kind: OVHMachineTemplate
       name: ${CLUSTER_NAME}-cp-machine
       namespace: ${NAMESPACE}
@@ -85,7 +85,7 @@ spec:
     spec:
       agentConfig: {}
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   namespace: ${NAMESPACE}
@@ -97,7 +97,7 @@ spec:
       imageName: ${OVH_IMAGE}
       sshKeyName: ${OVH_SSH_KEY}
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   namespace: ${NAMESPACE}
@@ -130,7 +130,7 @@ spec:
           kind: RKE2ConfigTemplate
           name: ${CLUSTER_NAME}-worker
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
         kind: OVHMachineTemplate
         name: ${CLUSTER_NAME}-worker-machine
 ---

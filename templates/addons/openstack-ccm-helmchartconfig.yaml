@@ -1,0 +1,66 @@
+# OpenStack Cloud Controller Manager for OVH Public Cloud.
+#
+# OVH Public Cloud is OpenStack-based; the upstream OpenStack CCM works
+# for Service type=LoadBalancer (via Octavia) and automatic node
+# lifecycle management. This manifest installs it on a workload cluster
+# via RKE2's built-in HelmChart mechanism.
+#
+# Note: CAPIOVH already handles providerID registration and taint
+# removal via its machine controller. If you install the CCM, both
+# will attempt to set providerID. This is safe because CAPIOVH's
+# InitializeWorkloadNode checks whether providerID is already set
+# before writing. The CCM becomes the authoritative source once
+# installed.
+#
+# Prerequisites:
+# 1. Same OpenStack credentials Secret as the Cinder CSI (see
+#    cinder-csi-helmchartconfig.yaml). The cloud.conf also needs:
+#
+#    [LoadBalancer]
+#    use-octavia = true
+#    subnet-id = <SUBNET_ID>         # Your cluster's private subnet
+#    floating-network-id = <EXT_NET>  # Ext-Net for FIP allocation
+#
+# Deploy via Fleet:
+# 1. Commit this file to your Fleet addons repo, e.g.
+#    `capiovh-fleet-addons/fleet/openstack-ccm/manifests/helmchartconfig.yaml`
+# 2. Create `fleet.yaml` with:
+#       namespace: fleet-default
+#       helm:
+#         repo: https://kubernetes.github.io/cloud-provider-openstack
+#         chart: openstack-cloud-controller-manager
+#         version: "2.31.3"
+#         releaseName: openstack-ccm
+#       targetCustomizations:
+#         - name: ccm
+#           clusterSelector:
+#             matchLabels:
+#               ccm: openstack
+# 3. Label your CAPIOVH workload cluster:
+#       kubectl -n <ns> label cluster <name> ccm=openstack
+#
+# Alternatively, use this standalone HelmChart CR (without Fleet):
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: openstack-ccm
+  namespace: kube-system
+spec:
+  repo: https://kubernetes.github.io/cloud-provider-openstack
+  chart: openstack-cloud-controller-manager
+  version: "2.31.3"
+  targetNamespace: kube-system
+  valuesContent: |-
+    secret:
+      enabled: false        # We create the cloud-config Secret manually
+      name: cloud-config
+    cloudConfig:
+      enabled: false
+    tolerations:
+      - key: node.cloudprovider.kubernetes.io/uninitialized
+        value: "true"
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""

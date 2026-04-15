@@ -42,11 +42,11 @@ spec:
     kind: KubeadmControlPlane
     name: ${CLUSTER_NAME}-control-plane
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
     kind: OVHCluster
     name: ${CLUSTER_NAME}
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHCluster
 metadata:
   name: ${CLUSTER_NAME}
@@ -73,7 +73,7 @@ spec:
   version: ${KUBERNETES_VERSION}
   machineTemplate:
     infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
       kind: OVHMachineTemplate
       name: ${CLUSTER_NAME}-cp
       namespace: ${NAMESPACE}
@@ -121,11 +121,11 @@ spec:
           kind: KubeadmConfigTemplate
           name: ${CLUSTER_NAME}-worker
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
         kind: OVHMachineTemplate
         name: ${CLUSTER_NAME}-worker
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   namespace: ${NAMESPACE}
@@ -137,7 +137,7 @@ spec:
       imageName: ${OVH_IMAGE:=Ubuntu 22.04}
       sshKeyName: ${OVH_SSH_KEY}
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   namespace: ${NAMESPACE}

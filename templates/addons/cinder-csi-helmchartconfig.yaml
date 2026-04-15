@@ -1,0 +1,64 @@
+# Cinder CSI driver for OVH Public Cloud block storage.
+#
+# OVH Public Cloud is OpenStack-based; the upstream Cinder CSI driver
+# works unmodified. This manifest installs it on a workload cluster
+# via RKE2's built-in HelmChart mechanism.
+#
+# Prerequisites:
+# 1. Obtain OpenStack credentials from the OVH console:
+#    Horizon > API Access > Download OpenStack RC File v3
+#    (or OVH API: POST /cloud/project/{serviceName}/user)
+# 2. Create a Secret on the WORKLOAD cluster:
+#
+#    kubectl create secret generic cloud-config \
+#      --namespace=kube-system \
+#      --from-literal=cloud.conf="$(cat <<'EOF'
+#    [Global]
+#    auth-url = https://auth.cloud.ovh.net/v3
+#    application-credential-id = <YOUR_APP_CRED_ID>
+#    application-credential-secret = <YOUR_APP_CRED_SECRET>
+#    region = <YOUR_REGION>    # e.g. GRA7, SBG5, EU-WEST-PAR
+#    [BlockStorage]
+#    bs-version = v3
+#    EOF
+#    )"
+#
+# Deploy via Fleet:
+# 1. Commit this file to your Fleet addons repo, e.g.
+#    `capiovh-fleet-addons/fleet/cinder-csi/manifests/helmchartconfig.yaml`
+# 2. Create `fleet.yaml` with:
+#       namespace: fleet-default
+#       helm:
+#         repo: https://kubernetes.github.io/cloud-provider-openstack
+#         chart: openstack-cinder-csi
+#         version: "2.31.3"
+#         releaseName: cinder-csi
+#       targetCustomizations:
+#         - name: cinder
+#           clusterSelector:
+#             matchLabels:
+#               csi: cinder
+# 3. Label your CAPIOVH workload cluster:
+#       kubectl -n <ns> label cluster <name> csi=cinder
+#
+# Alternatively, use this standalone HelmChart CR (without Fleet):
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: cinder-csi
+  namespace: kube-system
+spec:
+  repo: https://kubernetes.github.io/cloud-provider-openstack
+  chart: openstack-cinder-csi
+  version: "2.31.3"
+  targetNamespace: kube-system
+  valuesContent: |-
+    secret:
+      enabled: false        # We create the Secret manually (see above)
+      name: cloud-config
+    storageClass:
+      enabled: true
+      name: cinder-default
+      default: true          # Make Cinder the default StorageClass
+      reclaimPolicy: Delete
+      allowVolumeExpansion: true

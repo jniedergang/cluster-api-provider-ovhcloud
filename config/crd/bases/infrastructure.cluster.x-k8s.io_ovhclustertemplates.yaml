@@ -221,4 +221,210 @@ spec:
             type: object
         type: object
     served: true
+    storage: false
+  - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: OVHClusterTemplate is the Schema for the ovhclustertemplates
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: OVHClusterTemplateSpec defines the desired state of OVHClusterTemplate.
+            properties:
+              template:
+                description: OVHClusterTemplateResource defines the template resource
+                  for OVHCluster.
+                properties:
+                  metadata:
+                    description: Standard object's metadata.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          annotations is an unstructured key value map stored with a resource that may be
+                          set by external tools to store and retrieve arbitrary metadata. They are not
+                          queryable and should be preserved when modifying objects.
+                          More info: http://kubernetes.io/docs/user-guide/annotations
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          labels is a map of string keys and values that can be used to organize and categorize
+                          (scope and select) objects. May match selectors of replication controllers
+                          and services.
+                          More info: http://kubernetes.io/docs/user-guide/labels
+                        type: object
+                    type: object
+                  spec:
+                    description: OVHClusterSpec defines the desired state of OVHCluster.
+                    properties:
+                      controlPlaneEndpoint:
+                        description: ControlPlaneEndpoint represents the endpoint
+                          used to communicate with the control plane.
+                        properties:
+                          host:
+                            description: host is the hostname on which the API server
+                              is serving.
+                            maxLength: 512
+                            type: string
+                          port:
+                            description: port is the port on which the API server
+                              is serving.
+                            format: int32
+                            type: integer
+                        required:
+                        - host
+                        - port
+                        type: object
+                      identitySecret:
+                        description: |-
+                          IdentitySecret references the Secret containing OVH API credentials.
+                          The Secret must contain keys: endpoint, applicationKey, applicationSecret, consumerKey.
+                        properties:
+                          name:
+                            description: Name is the name of the Secret.
+                            type: string
+                          namespace:
+                            description: Namespace is the namespace of the Secret.
+                            type: string
+                        required:
+                        - name
+                        - namespace
+                        type: object
+                      loadBalancerConfig:
+                        description: LoadBalancerConfig describes how the OVH managed
+                          load balancer should be configured.
+                        properties:
+                          flavorName:
+                            default: small
+                            description: |-
+                              FlavorName is the OVH Octavia LB flavor name (small, medium, large, xl).
+                              Defaults to "small" if not specified.
+                            type: string
+                          floatingNetworkID:
+                            description: |-
+                              FloatingNetworkID is the external network for the floating IP.
+                              If set, a floating IP is created for external access to the control plane.
+                            type: string
+                          listeners:
+                            description: Listeners is a list of additional listeners
+                              beyond the default api-server listener (6443).
+                            items:
+                              description: OVHListener describes an additional listener
+                                on the load balancer.
+                              properties:
+                                backendPort:
+                                  description: BackendPort is the port on the backend
+                                    instances.
+                                  format: int32
+                                  type: integer
+                                name:
+                                  description: Name is the name of the listener.
+                                  type: string
+                                port:
+                                  description: Port is the port that the listener
+                                    should listen on.
+                                  format: int32
+                                  type: integer
+                                protocol:
+                                  description: Protocol is the protocol for the listener
+                                    (TCP, UDP, or SCTP).
+                                  enum:
+                                  - TCP
+                                  - UDP
+                                  - SCTP
+                                  type: string
+                              required:
+                              - backendPort
+                              - name
+                              - port
+                              - protocol
+                              type: object
+                            type: array
+                          subnetID:
+                            description: |-
+                              SubnetID is the private subnet to attach the load balancer to.
+                              If empty, the controller uses the subnet it created via NetworkConfig.
+                            type: string
+                        type: object
+                      networkConfig:
+                        description: NetworkConfig describes the private network configuration
+                          for the cluster.
+                        properties:
+                          dnsServers:
+                            description: DNSServers is a list of DNS server IP addresses.
+                            items:
+                              type: string
+                            type: array
+                          gateway:
+                            description: Gateway is the gateway IP address for the
+                              subnet.
+                            type: string
+                          privateNetworkID:
+                            description: |-
+                              PrivateNetworkID is the ID of an existing vRack private network.
+                              If empty, a new private network is created automatically.
+                            type: string
+                          subnetCIDR:
+                            description: |-
+                              SubnetCIDR is the CIDR for the subnet (e.g. "10.0.0.0/24").
+                              Required when creating a new network.
+                            type: string
+                          vlanID:
+                            description: |-
+                              VlanID is the vRack VLAN ID for the new private network.
+                              OVH allows only one private network per VLAN ID per project, so when
+                              running multiple CAPIOVH clusters in the same OVH project you MUST
+                              give each cluster a distinct VlanID. Defaults to 0 (untagged) which
+                              is fine for a single cluster but conflicts on multi-cluster setups.
+                            maximum: 4094
+                            minimum: 0
+                            type: integer
+                        required:
+                        - subnetCIDR
+                        type: object
+                      region:
+                        description: Region is the OVH Cloud region (e.g. "GRA7",
+                          "SBG5", "BHS5").
+                        type: string
+                      serviceName:
+                        description: ServiceName is the OVH Public Cloud project ID.
+                        type: string
+                      sshKeyName:
+                        description: SSHKeyName is the name of the SSH key registered
+                          in OVH to inject into instances.
+                        type: string
+                    required:
+                    - identitySecret
+                    - loadBalancerConfig
+                    - region
+                    - serviceName
+                    type: object
+                required:
+                - spec
+                type: object
+            required:
+            - template
+            type: object
+        type: object
+    served: true
     storage: true

@@ -38,6 +38,7 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
 	infrastructurev1alpha1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha1"
+	infrastructurev1alpha2 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha2"
 	"github.com/rancher-sandbox/cluster-api-provider-ovhcloud/internal/controller"
 )
 
@@ -49,6 +50,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(infrastructurev1alpha1.AddToScheme(scheme))
+	utilruntime.Must(infrastructurev1alpha2.AddToScheme(scheme))
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
 }
 
@@ -124,12 +126,22 @@ func main() {
 
 	if enableWebhooks {
 		if err := infrastructurev1alpha1.SetupOVHMachineWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "OVHMachine")
+			setupLog.Error(err, "unable to create webhook", "webhook", "OVHMachine v1alpha1")
 			os.Exit(1)
 		}
 
 		if err := infrastructurev1alpha1.SetupOVHClusterWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "OVHCluster")
+			setupLog.Error(err, "unable to create webhook", "webhook", "OVHCluster v1alpha1")
+			os.Exit(1)
+		}
+
+		if err := infrastructurev1alpha2.SetupOVHMachineWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "OVHMachine v1alpha2")
+			os.Exit(1)
+		}
+
+		if err := infrastructurev1alpha2.SetupOVHClusterWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "OVHCluster v1alpha2")
 			os.Exit(1)
 		}
 

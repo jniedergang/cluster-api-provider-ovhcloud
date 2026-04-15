@@ -406,3 +406,66 @@ curl -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
 
 A Prometheus datasource variable (`datasource`) is templated — select
 your Prometheus instance when first opening the dashboard.
+
+## OpenStack credentials for CSI and CCM
+
+OVH Public Cloud is OpenStack-based. The upstream **Cinder CSI** and
+**OpenStack Cloud Controller Manager** (CCM) work with OVH, but
+require OpenStack credentials distinct from the OVH API credentials
+used by CAPIOVH itself.
+
+### Obtaining OpenStack credentials
+
+1. Log in to the [OVH Manager](https://www.ovh.com/manager/)
+2. Navigate to **Public Cloud > Project Settings > Users & Roles**
+3. Create a user with the `objectstore_operator` and
+   `compute_operator` roles
+4. Download the **OpenStack RC file v3** (Identity API v3)
+5. Or generate application credentials:
+   ```bash
+   openstack application credential create capiovh-csi \
+     --unrestricted
+   ```
+
+### Creating the cloud-config Secret
+
+On each **workload** cluster, create the Secret before deploying the
+CSI or CCM addon:
+
+```bash
+kubectl create secret generic cloud-config \
+  --namespace=kube-system \
+  --from-literal=cloud.conf="$(cat <<'EOF'
+[Global]
+auth-url = https://auth.cloud.ovh.net/v3
+application-credential-id = <ID>
+application-credential-secret = <SECRET>
+region = <REGION>
+
+[BlockStorage]
+bs-version = v3
+
+[LoadBalancer]
+use-octavia = true
+subnet-id = <SUBNET_ID>
+floating-network-id = <EXT_NET_ID>
+EOF
+)"
+```
+
+The `[LoadBalancer]` section is only needed when deploying the CCM
+for `Service type=LoadBalancer` support. For CSI-only deployments,
+omit it.
+
+### Addon manifests
+
+Example Helm charts for both addons are provided in
+`templates/addons/`:
+
+| Addon | File | Purpose |
+|-------|------|---------|
+| Cinder CSI | `cinder-csi-helmchartconfig.yaml` | PersistentVolume provisioning via OVH block storage |
+| OpenStack CCM | `openstack-ccm-helmchartconfig.yaml` | Service type=LoadBalancer via Octavia, node lifecycle |
+
+Both can be deployed via Fleet (see `templates/addons/README.md`) or
+applied directly as RKE2 HelmChart CRs on the workload cluster.

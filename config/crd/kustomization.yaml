@@ -4,12 +4,18 @@ resources:
 - bases/infrastructure.cluster.x-k8s.io_ovhmachines.yaml
 - bases/infrastructure.cluster.x-k8s.io_ovhmachinetemplates.yaml
 
+patches:
+- path: patches/webhook_in_ovhclusters.yaml
+- path: patches/webhook_in_ovhclustertemplates.yaml
+- path: patches/webhook_in_ovhmachines.yaml
+- path: patches/webhook_in_ovhmachinetemplates.yaml
+
 # CAPI contract version label: declares which CRD versions implement the CAPI v1beta1 contract.
 # Without this label, the CAPI Cluster controller cannot resolve the InfraCluster reference
 # and reports "cannot find any versions matching contract cluster.x-k8s.io/v1beta1".
 labels:
 - pairs:
-    cluster.x-k8s.io/v1beta1: v1alpha1
+    cluster.x-k8s.io/v1beta1: v1alpha2
   includeSelectors: false
   fields:
   - path: metadata/labels

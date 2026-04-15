@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-04-15
+
+### Breaking Changes
+
+- **v1alpha2 API version**: the storage version is now
+  `infrastructure.cluster.x-k8s.io/v1alpha2`. A conversion webhook
+  serves both `v1alpha1` and `v1alpha2` — existing v1alpha1 resources
+  are converted automatically. The only breaking field change is
+  `OVHListener.Protocol`: the custom `string` enum (`TCP`, `HTTP`) is
+  replaced by `corev1.Protocol` (`TCP`, `UDP`, `SCTP`). `HTTP` is
+  removed — no shipped template or controller code ever used it.
+  Clusters with `Protocol: HTTP` listeners will fail conversion with a
+  clear error message.
+
+### Added
+
+- **MachineHealthCheck in ClusterClass**: the bundled
+  `clusterclass-ovhcloud-rke2` now includes `machineHealthCheck` blocks
+  for both control-plane and worker MachineDeployments (maxUnhealthy
+  34%, nodeStartupTimeout 20m, Ready False/Unknown timeout 5m). CAPI
+  automatically creates the corresponding MHC CRs for every Cluster
+  using this topology. The three standalone templates already shipped
+  MHC resources since v0.2.0.
+- **Cinder CSI addon manifest**: `templates/addons/cinder-csi-helmchartconfig.yaml`
+  installs the upstream OpenStack Cinder CSI driver on a workload
+  cluster via RKE2 HelmChart. Enables PersistentVolume provisioning
+  from OVH block storage. Requires OpenStack credentials — see
+  `docs/operations.md` for setup.
+- **OpenStack CCM addon manifest**: `templates/addons/openstack-ccm-helmchartconfig.yaml`
+  installs the upstream OpenStack Cloud Controller Manager. Enables
+  `Service type=LoadBalancer` (via Octavia) from workload clusters.
+  Note: CAPIOVH's `InitializeWorkloadNode` remains active but is
+  idempotent — the CCM becomes the authoritative providerID source
+  once deployed.
+- **OpenStack credentials documentation** in `docs/operations.md`:
+  how to obtain OVH OpenStack credentials and create the `cloud-config`
+  Secret for CSI/CCM addons.
+- **`metadata.yaml`** extended with the `v0.3` release series.
+
+### Fixed
+
+- **Stale troubleshooting reference**: `docs/TROUBLESHOOTING.md` no
+  longer references "Tracked in v0.3.0" for the LB health monitor
+  issue (already shipped in v0.2.2).
+
 ## [v0.2.3] - 2026-04-15
 
 ### Security
@@ -212,14 +257,6 @@ but several stuck-state failure modes are now eliminated:
   treats 409 `Invalid state PENDING_DELETE` / `PENDING_UPDATE` as
   success. New helper `IsAlreadyDeleting` in `pkg/ovh/errors.go`.
 
-### Deferred to v0.3.0
-
-- LoadBalancer `Protocol` refactor to `corev1.Protocol`. Rationale in
-  [docs/RELEASE.md](docs/RELEASE.md): breaking change needing a
-  v1alpha1↔v1alpha2 conversion webhook, and `corev1.Protocol` drops
-  the HTTP value the current custom enum exposes. Will land with the
-  v1alpha2 API bump.
-
 ## [v0.1.2] - 2026-04-13
 
 ### Added
@@ -308,7 +345,11 @@ Initial release.
 - Webhook validation deployed via cert-manager on RKE2 management cluster
 - Helm chart install with webhooks enabled
 
-[Unreleased]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.3.0
+[v0.2.3]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.2.3
+[v0.2.2]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.2.2
+[v0.2.1]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.2.1
 [v0.2.0]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.2.0
 [v0.1.2]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.1.2
 [v0.1.1]: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/tag/v0.1.1

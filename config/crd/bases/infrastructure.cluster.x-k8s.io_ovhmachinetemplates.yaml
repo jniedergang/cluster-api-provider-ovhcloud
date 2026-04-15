@@ -126,4 +126,117 @@ spec:
             type: object
         type: object
     served: true
+    storage: false
+  - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: OVHMachineTemplate is the Schema for the ovhmachinetemplates
+          API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: OVHMachineTemplateSpec defines the desired state of OVHMachineTemplate.
+            properties:
+              template:
+                description: Template is the OVHMachineTemplate template.
+                properties:
+                  metadata:
+                    description: Standard object's metadata.
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          annotations is an unstructured key value map stored with a resource that may be
+                          set by external tools to store and retrieve arbitrary metadata. They are not
+                          queryable and should be preserved when modifying objects.
+                          More info: http://kubernetes.io/docs/user-guide/annotations
+                        type: object
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          labels is a map of string keys and values that can be used to organize and categorize
+                          (scope and select) objects. May match selectors of replication controllers
+                          and services.
+                          More info: http://kubernetes.io/docs/user-guide/labels
+                        type: object
+                    type: object
+                  spec:
+                    description: Spec is the specification of the desired behavior
+                      of the machine.
+                    properties:
+                      additionalVolumes:
+                        description: AdditionalVolumes is a list of additional block
+                          storage volumes to attach.
+                        items:
+                          description: OVHVolume defines an additional block storage
+                            volume to attach to the instance.
+                          properties:
+                            name:
+                              description: Name is a human-readable name for the volume.
+                              type: string
+                            sizeGB:
+                              description: SizeGB is the volume size in gigabytes.
+                              minimum: 1
+                              type: integer
+                            type:
+                              description: Type is the volume type (e.g. "classic",
+                                "high-speed", "high-speed-gen2").
+                              type: string
+                          required:
+                          - name
+                          - sizeGB
+                          type: object
+                        type: array
+                      failureDomain:
+                        description: FailureDomain is the availability zone.
+                        type: string
+                      flavorName:
+                        description: FlavorName is the OVH instance flavor (e.g. "b2-7",
+                          "b2-15", "c2-15").
+                        type: string
+                      imageName:
+                        description: ImageName is the OS image name (e.g. "Ubuntu
+                          22.04", "Debian 12").
+                        type: string
+                      providerID:
+                        description: |-
+                          ProviderID is set by the controller after instance creation.
+                          Format: "ovhcloud://<region>/<instanceID>"
+                        type: string
+                      rootDiskSize:
+                        description: RootDiskSize is the root disk size in GB. 0 uses
+                          the flavor default.
+                        type: integer
+                      sshKeyName:
+                        description: SSHKeyName overrides the cluster-level SSH key
+                          for this machine.
+                        type: string
+                    required:
+                    - flavorName
+                    - imageName
+                    type: object
+                required:
+                - spec
+                type: object
+            type: object
+        type: object
+    served: true
     storage: true
