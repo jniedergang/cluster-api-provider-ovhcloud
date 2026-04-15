@@ -246,7 +246,11 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.0
 CONTROLLER_TOOLS_VERSION ?= v0.16.5
-ENVTEST_VERSION ?= latest
+# Pinned to a known-good pseudo-version. setup-envtest is published only as
+# pseudo-versions (no semver tags). Newer commits bump the required Go (the
+# 2025-11-04 commit moved to Go 1.25, the 2026-04-05 commit to Go 1.26),
+# which breaks Go 1.24 builds. Bump together with the Go toolchain.
+ENVTEST_VERSION ?= v0.0.0-20250827215931-c4304622a139
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
