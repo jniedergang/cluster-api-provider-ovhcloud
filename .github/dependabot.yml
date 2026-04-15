@@ -24,6 +24,14 @@ updates:
     labels:
       - "kind/cleanup"
       - "area/build-and-release"
+    ignore:
+      # Stay on the Go major.minor declared in go.mod (1.24). Major-major
+      # bumps (1.24 -> 1.25, 1.25 -> 1.26) require a coordinated bump of
+      # go.mod's `go` and `toolchain` directives — do those manually.
+      - dependency-name: "registry.suse.com/bci/golang"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
