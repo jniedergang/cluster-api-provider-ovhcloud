@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.4
 
 require (
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/ovh/go-ovh v1.9.0
 	github.com/prometheus/client_golang v1.22.0
 	k8s.io/api v0.33.2
