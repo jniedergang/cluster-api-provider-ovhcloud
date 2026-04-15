@@ -4,19 +4,23 @@
 # Combines:
 #   1. kubectl apply of the Rancher import manifest (creates cattle-cluster-agent)
 #   2. patch of the agent Deployment to mount the cattle-system/serverca ConfigMap
-#      at /etc/kubernetes/ssl/certs (required when Rancher is configured with
-#      STRICT_VERIFY=true and a custom or LE-issued cert).
+#      via an emptyDir + initContainer (the agent writes to the CA path at runtime,
+#      so a direct ConfigMap mount fails with "Read-only file system").
 #
-# The serverca ConfigMap itself is created automatically by the CAPIOVH
-# ClusterClass when the optional `rancherServerCA` topology variable is set.
-# Without that variable, this script will only do step 1 (the agent will fail
-# to connect if Rancher requires STRICT_VERIFY).
+# The serverca ConfigMap is created automatically by the CAPIOVH ClusterClass
+# when the `rancherServerCA` topology variable is set. Its content MUST be the
+# exact TLS certificate chain presented by the Rancher server — obtain it with:
+#
+#   curl -sk https://<RANCHER_URL>/v3/settings/cacerts | jq -r .value
+#
+# The same value must also be set in Rancher's `cacerts` setting (Settings > cacerts)
+# so that the agent's CA checksum verification passes.
 #
 # Usage:
 #   ./import-to-rancher.sh <cluster-name>
 #
 # Required env:
-#   MGMT_KUBECONFIG  - kubeconfig of the management cluster running Rancher
+#   MGMT_KUBECONFIG     - kubeconfig of the management cluster running Rancher
 #   WORKLOAD_KUBECONFIG - kubeconfig of the CAPIOVH workload cluster
 #
 # Optional:
@@ -75,24 +79,38 @@ if ! $KWL -n cattle-system get cm serverca >/dev/null 2>&1; then
   echo "WARNING: ConfigMap cattle-system/serverca not found on workload."
   echo "If Rancher uses STRICT_VERIFY=true, the agent will fail to connect."
   echo "Set the 'rancherServerCA' topology variable on the Cluster to auto-create it,"
-  echo "OR create it manually:"
-  echo "  $KWL -n cattle-system create configmap serverca --from-file=serverca=/path/to/ca-bundle.pem"
+  echo "OR create it manually with the output of:"
+  echo "  curl -sk https://<RANCHER_URL>/v3/settings/cacerts | jq -r .value > /tmp/serverca.pem"
+  echo "  $KWL -n cattle-system create configmap serverca --from-file=serverca=/tmp/serverca.pem"
 fi
 
 # Idempotent patch: only add the mount if not already present.
 HAS_MOUNT=$($KWL -n cattle-system get deploy cattle-cluster-agent \
-  -o jsonpath='{.spec.template.spec.containers[0].volumeMounts[?(@.name=="serverca")].name}')
-if [ "$HAS_MOUNT" = "serverca" ]; then
+  -o jsonpath='{.spec.template.spec.containers[0].volumeMounts[?(@.name=="ssl-certs")].name}')
+if [ "$HAS_MOUNT" = "ssl-certs" ]; then
   echo "    serverca mount already present, nothing to do."
 else
+  # The agent writes to /etc/kubernetes/ssl/certs/serverca at runtime (mv from
+  # /tmp), so a direct ConfigMap mount fails with EROFS. Use an emptyDir volume
+  # and an initContainer that copies the CM content into it before the agent starts.
   $KWL -n cattle-system patch deploy cattle-cluster-agent --type=json -p '[
-    {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"mountPath":"/etc/kubernetes/ssl/certs","name":"serverca","readOnly":true}},
-    {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"serverca","configMap":{"name":"serverca"}}}
+    {"op":"add","path":"/spec/template/spec/initContainers","value":[{
+      "name":"copy-serverca",
+      "image":"busybox",
+      "command":["sh","-c","cp /serverca-cm/serverca /ssl/serverca"],
+      "volumeMounts":[
+        {"name":"ssl-certs","mountPath":"/ssl"},
+        {"name":"serverca-cm","mountPath":"/serverca-cm","readOnly":true}
+      ]
+    }]},
+    {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"mountPath":"/etc/kubernetes/ssl/certs","name":"ssl-certs"}},
+    {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"ssl-certs","emptyDir":{}}},
+    {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"serverca-cm","configMap":{"name":"serverca"}}}
   ]'
-  echo "    serverca mount patched."
+  echo "    serverca mount patched (emptyDir + initContainer)."
 fi
 
 echo
-echo "Done. The cluster should appear Active in Rancher within ~30 seconds."
+echo "Done. The cluster should appear Active in Rancher within ~60 seconds."
 echo "Watch with:"
 echo "  $KMGMT get cluster.management.cattle.io $RANCHER_NS -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}{\"\\n\"}'"

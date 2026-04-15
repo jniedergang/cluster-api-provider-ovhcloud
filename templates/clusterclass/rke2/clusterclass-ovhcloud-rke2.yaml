@@ -147,14 +147,15 @@ spec:
           type: string
           default: ""
           description: |
-            PEM-encoded CA bundle that the workload cluster's
-            cattle-cluster-agent should trust when connecting to Rancher
-            (required when Rancher uses STRICT_VERIFY=true with a custom
-            or LE-issued cert). When non-empty, a ConfigMap
-            cattle-system/serverca is auto-created on the workload
-            cluster via the RKE2 manifest mechanism. The agent deployment
-            still needs a one-time patch to mount it — see
-            scripts/import-to-rancher.sh.
+            PEM-encoded TLS certificate chain from the Rancher server.
+            Required when Turtles uses agent-tls-mode=true (STRICT_VERIFY).
+            Obtain it with:
+              curl -sk https://RANCHER_URL/v3/settings/cacerts | jq -r .value
+            The SAME value must also be set in the Rancher setting
+            "cacerts" (Settings > cacerts in the UI). When non-empty, a
+            ConfigMap cattle-system/serverca is auto-created on the
+            workload cluster. The agent deployment still needs a one-time
+            patch to mount it — see scripts/import-to-rancher.sh.
 
   # --- Patches that wire variables into the templates ---
   patches:

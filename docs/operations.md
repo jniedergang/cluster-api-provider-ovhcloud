@@ -131,14 +131,33 @@ with Rancher to appear in the UI. Rancher creates a
 `Cluster`, but the agent on the workload still needs:
 
 1. The Rancher import manifest applied (creates `cattle-cluster-agent`)
-2. (When Rancher uses STRICT_VERIFY) the trusted CA bundle mounted on
-   the agent at `/etc/kubernetes/ssl/certs/serverca`
+2. (When Turtles uses `agent-tls-mode=true`, i.e. STRICT_VERIFY) the
+   trusted CA bundle mounted on the agent at
+   `/etc/kubernetes/ssl/certs/serverca`
 
-CAPIOVH ships two pieces to make this one step:
+#### Prerequisites (one-time Rancher setup)
 
-**a)** Set the optional `rancherServerCA` topology variable on the
-`Cluster` to your Rancher CA bundle (PEM, concatenated chain). When
-present, the ClusterClass writes
+The Rancher `cacerts` setting must contain the **exact TLS certificate
+chain** presented by the Rancher server. Obtain it with:
+
+```bash
+curl -sk https://RANCHER_URL/v3/settings/cacerts | jq -r .value
+```
+
+If it is empty or incorrect, set it via:
+
+```bash
+CHAIN=$(echo | openssl s_client -connect RANCHER_URL:443 -showcerts 2>/dev/null \
+  | awk '/BEGIN CERT/,/END CERT/')
+kubectl patch setting cacerts --type=merge \
+  -p "{\"value\":$(echo "$CHAIN" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))')}"
+```
+
+#### Per-cluster setup
+
+**a)** Set the `rancherServerCA` topology variable on the `Cluster`.
+The value **must be** the content of the Rancher `cacerts` setting
+(same chain as above). When present, the ClusterClass writes
 `/var/lib/rancher/rke2/server/manifests/capiovh-rancher-serverca.yaml`
 on every CP node, and RKE2 auto-applies the `cattle-system/serverca`
 ConfigMap on startup.
@@ -151,23 +170,24 @@ spec:
       - name: rancherServerCA
         value: |
           -----BEGIN CERTIFICATE-----
-          ...root CA...
+          ...server cert...
           -----END CERTIFICATE-----
           -----BEGIN CERTIFICATE-----
           ...intermediate...
           -----END CERTIFICATE-----
 ```
 
-You can extract the CA bundle from any other Rancher-managed cluster
-already imported (e.g. the management cluster):
+Extract this value from the Rancher API:
 
 ```bash
-kubectl --kubeconfig=$WORKING_CLUSTER_KUBECONFIG \
-  -n cattle-system get cm serverca -o jsonpath='{.data.serverca}'
+curl -sk https://RANCHER_URL/v3/settings/cacerts | jq -r .value
 ```
 
 **b)** Run the helper script to apply the import manifest **and**
-patch the `cattle-cluster-agent` Deployment to mount the ConfigMap:
+patch the `cattle-cluster-agent` Deployment to mount the ConfigMap.
+The script uses an `emptyDir` + `initContainer` pattern because the
+agent writes to the CA path at runtime (a direct ConfigMap mount is
+read-only and causes the agent to crash):
 
 ```bash
 export MGMT_KUBECONFIG=/path/to/rancher-mgmt.yaml
