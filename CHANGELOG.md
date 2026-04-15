@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.2.3] - 2026-04-15
+
+### Security
+
+- **Supply chain hardening** (parallels CAPHV v0.2.9 / rancher-security#1667).
+  Brings CAPIOVH up to the same baseline expected before a Rancher Sandbox
+  security scan:
+  - **Action SHA pinning**: all 11 GitHub Actions in the four workflows
+    (`build.yml`, `lint.yml`, `release.yml`, `test.yml`) are now pinned to
+    full 40-char commit SHAs with `# vX.Y.Z` trailing comments. Tag
+    references like `@v4` are mutable and would be flagged as a
+    tag-hijack risk. Manual maintenance is required when bumping —
+    Dependabot's default behaviour is tags, not SHAs.
+  - **cosign keyless signing** of every released container image via
+    Sigstore OIDC. Verification requires `cosign` v3.0.0+ (v2.x reports
+    "no signatures found" on v3-format Sigstore bundles even when valid).
+  - **SLSA build provenance** attestation
+    (`actions/attest-build-provenance@v4.1.0`) is generated and pushed
+    to the registry alongside the image. Verifiable via
+    `gh attestation verify oci://... --owner <org>`.
+  - **BuildKit SBOM** + max-mode provenance enabled in
+    `docker/build-push-action` (`sbom: true`, `provenance: mode=max`).
+  - **`hack/`-style hadolint script**:
+    `scripts/ci-lint-dockerfiles.sh` — reusable Kubernetes-project
+    boilerplate for Dockerfile linting (warning-or-higher fails CI).
+  - **Dependabot** config (`.github/dependabot.yml`): weekly bumps for
+    `gomod`, `docker`, and `github-actions` ecosystems. The CAPI core
+    deps (`cluster-api`, `controller-runtime`, `k8s.io/*`, `etcd`,
+    `grpc`) are pinned out and bumped manually together to avoid CAPI
+    contract breakage.
+  - **Least-privilege workflow permissions**: each workflow now has a
+    workflow-level `permissions: contents: read` default and per-job
+    overrides only where needed (e.g. `packages: write` for the build
+    job, `id-token: write` + `attestations: write` for cosign + SLSA).
+    The `release` job has `contents: write` for `gh release create`.
+    All other jobs are read-only.
+  - `persist-credentials: false` added to every `actions/checkout` step
+    to limit the post-checkout credential blast radius.
+
+### Notes
+
+- No code changes — pure CI/CD and policy hardening.
+- v0.2.2 image is unsigned; v0.2.3 will be the first cosigned release.
+- Dependabot will start opening PRs after the merge — they may include
+  tag-style bumps; reject those and apply the SHA pin manually (see
+  `CONTRIBUTING.md` → "Updating GitHub Actions").
+
 ## [v0.2.2] - 2026-04-15
 
 ### Added

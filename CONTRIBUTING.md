@@ -103,3 +103,46 @@ For security-related issues, please follow [SECURITY.md](SECURITY.md) instead.
 
 Documentation lives under `docs/` and as Markdown in the repo. Doc-only PRs do
 not require sign-off (DCO) but should follow the same review process.
+
+## Updating GitHub Actions
+
+All actions in `.github/workflows/*.yml` must be pinned to **full 40-char
+commit SHAs** with a trailing `# vX.Y.Z` comment. Tag references (`@v4`,
+`@v5`) are mutable and a known supply-chain risk (rancher/rancher-security#1667
+on the sister project CAPHV).
+
+When adding or bumping an action:
+
+```bash
+# Resolve the SHA for a given tag
+gh api repos/<owner>/<action>/git/ref/tags/<tag> --jq '.object.sha'
+
+# Format in the workflow
+uses: owner/action@<40-char-sha> # v1.2.3
+```
+
+Dependabot will sometimes open PRs with tag-style bumps. Close those and apply
+the bump manually with the SHA pin. Dependabot can update SHA pins in place if
+configured correctly, but the default behaviour is tags.
+
+To lint the Dockerfile locally before submitting a PR:
+
+```bash
+./scripts/ci-lint-dockerfiles.sh
+```
+
+## Released image verification
+
+Starting with v0.2.3, every release image is signed with cosign (Sigstore
+keyless OIDC) and ships a SLSA build provenance attestation. To verify:
+
+```bash
+# Cosign signature (requires cosign v3.0.0+)
+cosign verify ghcr.io/<org>/cluster-api-provider-ovhcloud:v0.2.3 \
+  --certificate-identity-regexp "https://github.com/.*/cluster-api-provider-ovhcloud/.github/workflows/release.yml@.*" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+# SLSA provenance attestation (no cosign version dependency)
+gh attestation verify oci://ghcr.io/<org>/cluster-api-provider-ovhcloud:v0.2.3 \
+  --owner <org>
+```

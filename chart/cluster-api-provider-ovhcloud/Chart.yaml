@@ -2,8 +2,8 @@ apiVersion: v2
 name: cluster-api-provider-ovhcloud
 description: Cluster API Infrastructure Provider for OVH Public Cloud
 type: application
-version: 0.2.2
-appVersion: "v0.2.2"
+version: 0.2.3
+appVersion: "v0.2.3"
 home: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud
 sources:
   - https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud
