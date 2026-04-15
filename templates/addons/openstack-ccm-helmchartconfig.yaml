@@ -29,7 +29,7 @@
 #       helm:
 #         repo: https://kubernetes.github.io/cloud-provider-openstack
 #         chart: openstack-cloud-controller-manager
-#         version: "2.31.3"
+#         version: "2.32.0"
 #         releaseName: openstack-ccm
 #       targetCustomizations:
 #         - name: ccm
@@ -48,14 +48,13 @@ metadata:
 spec:
   repo: https://kubernetes.github.io/cloud-provider-openstack
   chart: openstack-cloud-controller-manager
-  version: "2.31.3"
+  version: "2.32.0"
   targetNamespace: kube-system
   valuesContent: |-
     secret:
-      enabled: false        # We create the cloud-config Secret manually
+      enabled: true
+      create: false          # Use the manually-created cloud-config Secret
       name: cloud-config
-    cloudConfig:
-      enabled: false
     tolerations:
       - key: node.cloudprovider.kubernetes.io/uninitialized
         value: "true"
@@ -63,4 +62,4 @@ spec:
       - key: node-role.kubernetes.io/control-plane
         effect: NoSchedule
     nodeSelector:
-      node-role.kubernetes.io/control-plane: ""
+      node-role.kubernetes.io/control-plane: "true"

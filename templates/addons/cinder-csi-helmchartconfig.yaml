@@ -31,7 +31,7 @@
 #       helm:
 #         repo: https://kubernetes.github.io/cloud-provider-openstack
 #         chart: openstack-cinder-csi
-#         version: "2.31.3"
+#         version: "2.32.2"
 #         releaseName: cinder-csi
 #       targetCustomizations:
 #         - name: cinder
@@ -50,15 +50,16 @@ metadata:
 spec:
   repo: https://kubernetes.github.io/cloud-provider-openstack
   chart: openstack-cinder-csi
-  version: "2.31.3"
+  version: "2.32.2"
   targetNamespace: kube-system
   valuesContent: |-
     secret:
-      enabled: false        # We create the Secret manually (see above)
+      enabled: true
+      create: false          # Use the manually-created Secret (see above)
       name: cloud-config
+      filename: cloud.conf
     storageClass:
       enabled: true
-      name: cinder-default
-      default: true          # Make Cinder the default StorageClass
-      reclaimPolicy: Delete
-      allowVolumeExpansion: true
+      delete:
+        isDefault: true
+        allowVolumeExpansion: true
