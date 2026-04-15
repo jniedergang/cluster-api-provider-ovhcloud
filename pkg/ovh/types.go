@@ -65,7 +65,6 @@ type CreateInstanceOpts struct {
 	Networks       []InstanceNetwork `json:"networks,omitempty"`
 	MonthlyBilling bool              `json:"monthlyBilling,omitempty"`
 	GroupID        string            `json:"groupId,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
 // InstanceNetwork describes a network to attach during instance creation.
