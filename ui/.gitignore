@@ -5,3 +5,5 @@ dist/
 ui/node_modules/
 ui/dist-pkg/
 ui/dist/
+ui/yarn.lock
+ui/pkg/capiovh/.shell
