@@ -12,6 +12,7 @@
     "@vue/cli-service": "5.0.8",
     "@vue/cli-plugin-typescript": "5.0.8"
   },
+  "icon": "https://raw.githubusercontent.com/jniedergang/cluster-api-provider-ovhcloud/main/ovhcloud-logo.png",
   "files": [
     "**/*"
   ],
