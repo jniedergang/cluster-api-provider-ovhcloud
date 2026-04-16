@@ -1,24 +1,24 @@
+const PRODUCT = 'manager';
+
 export function init(plugin, store) {
   const {
-    product,
-    basicType,
     virtualType,
-  } = plugin.DSL(store, 'capiovh');
-
-  product({
-    inStore:             'management',
-    icon:                'cluster',
-    label:               'OVH Cloud',
-    removable:           false,
-    showClusterSwitcher: false,
-  });
+    basicType,
+  } = plugin.DSL(store, PRODUCT);
 
   virtualType({
-    label:   'Clusters',
-    name:    'capiovh-clusters',
-    icon:    'cluster',
-    weight:  100,
+    label:      'OVH Cloud',
+    icon:       'cluster',
+    name:       'capiovh-dashboard',
+    namespaced: false,
+    weight:     98,
+    route:      {
+      name:   'c-cluster-manager-capiovh',
+      params: { cluster: '_' }
+    },
+    overview: true,
+    exact:    true,
   });
 
-  basicType(['capiovh-clusters']);
+  basicType(['capiovh-dashboard']);
 }
