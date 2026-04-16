@@ -1,18 +1,15 @@
-capiovh:
-  nav:
-    clusters: OVH Clusters
-    create: Create Cluster
-  list:
-    title: OVH Cloud Clusters
-    create: Create Cluster
-    name: Name
-    namespace: Namespace
-    phase: Phase
-    version: Version
-    cp: CP
-    workers: Workers
-    age: Age
-  create:
-    title: Create OVH Cloud Cluster
-  detail:
-    title: Cluster Detail
+nav:
+  group:
+    OVHCloud: OVH Cloud
+
+typeLabel:
+  infrastructure.cluster.x-k8s.io.ovhcluster: |-
+    {count, plural,
+      one { OVH Cluster }
+      other { OVH Clusters }
+    }
+  infrastructure.cluster.x-k8s.io.ovhmachine: |-
+    {count, plural,
+      one { OVH Machine }
+      other { OVH Machines }
+    }

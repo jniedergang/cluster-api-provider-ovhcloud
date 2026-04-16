@@ -1,0 +1,2 @@
+(("undefined"!==typeof self?self:this)["webpackChunkcapiovh_0_1_0"]=("undefined"!==typeof self?self:this)["webpackChunkcapiovh_0_1_0"]||[]).push([[37],{9037:function(e){const n=[{nav:{group:{OVHCloud:"OVH Cloud"}},typeLabel:{"infrastructure.cluster.x-k8s.io.ovhcluster":"{count, plural,\n  one { OVH Cluster }\n  other { OVH Clusters }\n}","infrastructure.cluster.x-k8s.io.ovhmachine":"{count, plural,\n  one { OVH Machine }\n  other { OVH Machines }\n}"}}];e.exports=n.length<=1?n[0]:n}}]);
+//# sourceMappingURL=capiovh-0.1.0.umd.min.37.js.map

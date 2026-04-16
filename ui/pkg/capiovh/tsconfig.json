@@ -1,0 +1,51 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "target": "esnext",
+    "module": "esnext",
+    // "strict": true, //this causes problems with vuex typing eg "property $store does not exist on type..."
+    "jsx": "preserve",
+    "importHelpers": true,
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "preserveSymlinks": true,
+    "typeRoots": [
+      "../../node_modules",
+      "../../node_modules/@rancher/shell/types"
+    ],    
+    "types": [
+      "node",
+      "webpack-env",
+      "@types/node",
+      "@types/lodash",
+      "rancher",
+      "shell"
+    ],
+    "lib": [
+      "esnext",
+      "dom",
+      "dom.iterable",
+      "scripthost"
+    ],
+    "paths": {
+      "@shell/*": [
+        "../../node_modules/@rancher/shell/*"
+      ],
+      "@components/*": [
+        "@rancher/components/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.d.ts",
+    "**/*.tsx",
+  ],
+  "exclude": [
+    "node_modules",
+  ]
+}

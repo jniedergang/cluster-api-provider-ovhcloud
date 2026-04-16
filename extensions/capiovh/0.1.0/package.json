@@ -1,7 +1,19 @@
 {
   "name": "capiovh",
+  "description": "Rancher UI Extension for OVH Cloud Kubernetes clusters",
   "version": "0.1.0",
+  "private": false,
   "rancher": true,
-  "files": ["**/*"],
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@vue/cli-plugin-babel": "5.0.8",
+    "@vue/cli-service": "5.0.8",
+    "@vue/cli-plugin-typescript": "5.0.8"
+  },
+  "files": [
+    "**/*"
+  ],
   "main": "capiovh-0.1.0.umd.min.js"
 }

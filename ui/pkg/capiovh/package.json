@@ -1,11 +1,27 @@
 {
   "name": "capiovh",
+  "description": "Rancher UI Extension for OVH Cloud Kubernetes clusters",
   "version": "0.1.0",
+  "private": false,
   "rancher": {
     "annotations": {
-      "catalog.cattle.io/ui-extensions-version": ">=2.0.0",
+      "catalog.cattle.io/certified": "rancher",
       "catalog.cattle.io/display-name": "OVH Cloud CAPI Provider",
-      "catalog.cattle.io/namespace": "cattle-ui-plugin-system"
+      "catalog.cattle.io/ui-extensions-version": ">= 3.0.0 < 4.0.0",
+      "catalog.cattle.io/rancher-version": ">= 2.10.0-0"
     }
-  }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@vue/cli-plugin-babel": "5.0.8",
+    "@vue/cli-service": "5.0.8",
+    "@vue/cli-plugin-typescript": "5.0.8"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
 }

@@ -1,18 +1,44 @@
 {
-  "name": "capiovh-ext",
-  "version": "0.1.0",
-  "private": true,
+  "name": "capiovh-ui-extension",
+  "description": "Rancher Dashboard extension for CAPIOVH (OVH Cloud CAPI Provider)",
+  "version": "0.8.4",
+  "private": false,
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
-    "@rancher/shell": "^3.0.11"
+    "@rancher/components": "0.3.0-alpha.1",
+    "@rancher/shell": "3.0.5-rc.3",
+    "@types/lodash": "4.14.196",
+    "cache-loader": "4.1.0",
+    "color": "4.2.3",
+    "core-js": "3.21.1",
+    "css-loader": "6.7.3",
+    "ip": "2.0.1",
+    "node-polyfill-webpack-plugin": "3.0.0",
+    "semver": "7.5.4"
   },
   "resolutions": {
-    "@types/node": "^18"
+    "**/webpack": "5",
+    "@types/node": "16.4.3",
+    "glob": "7.2.3"
   },
   "scripts": {
-    "build-pkg": "./node_modules/@rancher/shell/scripts/extension/build-pkg.sh capiovh",
-    "serve-pkgs": "node ./node_modules/@rancher/shell/scripts/extension/serve-pkgs"
+    "dev": "NODE_ENV=dev ./node_modules/.bin/vue-cli-service serve",
+    "build": "./node_modules/.bin/vue-cli-service build",
+    "clean": "./node_modules/@rancher/shell/scripts/clean",
+    "build-pkg": "./node_modules/@rancher/shell/scripts/build-pkg.sh",
+    "serve-pkgs": "./node_modules/@rancher/shell/scripts/serve-pkgs",
+    "publish-pkgs": "./node_modules/@rancher/shell/scripts/extension/publish",
+    "parse-tag-name": "./node_modules/@rancher/shell/scripts/extension/parse-tag-name",
+    "migrate": "node ./scrips/vue-migrate.js"
+  },
+  "devDependencies": {
+    "eslint-plugin-cypress": "2.12.1",
+    "eslint-plugin-import": "2.23.4",
+    "eslint-plugin-jest": "24.4.0",
+    "eslint-plugin-node": "11.1.0",
+    "eslint-plugin-promise": "7.2.1",
+    "eslint-plugin-vue": "9.10.0"
   }
 }
