@@ -11,36 +11,14 @@ export function init(plugin, store) {
     label:               'OVH Cloud',
     removable:           false,
     showClusterSwitcher: false,
-    to:                  {
-      name:   'c-cluster-capiovh',
-      params: { product: 'capiovh' },
-    },
   });
 
   virtualType({
-    labelKey:  'capiovh.nav.clusters',
-    name:      'capiovh-clusters',
-    route:     {
-      name:   'c-cluster-capiovh',
-      params: { product: 'capiovh' },
-    },
-    icon:      'cluster',
-    weight:    100,
+    label:   'Clusters',
+    name:    'capiovh-clusters',
+    icon:    'cluster',
+    weight:  100,
   });
 
-  virtualType({
-    labelKey:  'capiovh.nav.create',
-    name:      'capiovh-create',
-    route:     {
-      name:   'c-cluster-capiovh-create',
-      params: { product: 'capiovh' },
-    },
-    icon:      'plus',
-    weight:    90,
-  });
-
-  basicType([
-    'capiovh-clusters',
-    'capiovh-create',
-  ]);
+  basicType(['capiovh-clusters']);
 }
