@@ -1,3 +1,3 @@
 export default function(plugin) {
-  plugin.addProduct(require('./product'));
+  console.log('[CAPIOVH] Plugin loaded successfully!', plugin);
 }
