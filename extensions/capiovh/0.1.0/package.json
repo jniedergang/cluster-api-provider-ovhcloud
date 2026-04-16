@@ -2,6 +2,8 @@
   "name": "capiovh",
   "version": "0.1.0",
   "rancher": true,
-  "files": ["**/*"],
+  "files": [
+    "**/*"
+  ],
   "main": "capiovh-0.1.0.umd.min.js"
 }
