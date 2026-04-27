@@ -57,12 +57,12 @@ jobs:
 
       - name: Build and load CAPIOVH image
         run: |
-          make docker-build IMG=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}:e2e
-          kind load docker-image ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}:e2e --name capiovh-e2e
+          make docker-build IMG=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }} TAG=e2e ARCH=amd64
+          kind load docker-image ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}-amd64:e2e --name capiovh-e2e
 
       - name: Deploy CAPIOVH
         run: |
-          make deploy IMG=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}:e2e
+          make deploy IMG=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}-amd64:e2e
           kubectl wait --for=condition=available --timeout=120s deployment/capiovh-controller-manager -n capiovh-system
 
       - name: Create OVH credentials secret
