@@ -59,8 +59,9 @@ jobs:
         run: |
           IMG_FULL=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}-amd64:e2e
           make docker-build IMG=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }} TAG=e2e ARCH=amd64
-          podman save "$IMG_FULL" -o /tmp/capiovh.tar
+          podman save --format docker-archive "$IMG_FULL" -o /tmp/capiovh.tar
           kind load image-archive /tmp/capiovh.tar --name capiovh-e2e
+          docker exec capiovh-e2e-control-plane crictl images | grep cluster-api-provider-ovhcloud
 
       - name: Deploy CAPIOVH
         run: |
