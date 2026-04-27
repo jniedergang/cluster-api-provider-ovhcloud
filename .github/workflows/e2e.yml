@@ -57,8 +57,10 @@ jobs:
 
       - name: Build and load CAPIOVH image
         run: |
+          IMG_FULL=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}-amd64:e2e
           make docker-build IMG=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }} TAG=e2e ARCH=amd64
-          kind load docker-image ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}-amd64:e2e --name capiovh-e2e
+          podman save "$IMG_FULL" -o /tmp/capiovh.tar
+          kind load image-archive /tmp/capiovh.tar --name capiovh-e2e
 
       - name: Deploy CAPIOVH
         run: |
