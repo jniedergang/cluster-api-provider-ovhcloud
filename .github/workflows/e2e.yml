@@ -29,6 +29,12 @@ jobs:
     name: e2e-lifecycle
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Bind to the 'ovh' environment so OVH_* secrets require a reviewer
+    # approval before the job can start. This is the main mitigation
+    # against a compromised token pushing a malicious workflow on a
+    # public repo: exfiltration would trigger an approval notification
+    # instead of running silently.
+    environment: ovh
     permissions:
       contents: read
     steps:
@@ -82,12 +88,21 @@ jobs:
           OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
         run: |
           kubectl create namespace fleet-default || true
+          # Pass secret values via stdin instead of --from-literal=$VAR so they
+          # never appear as process args (visible to /proc, ps, or shell traces).
+          umask 077
+          tmpdir=$(mktemp -d)
+          trap 'rm -rf "$tmpdir"' EXIT
+          printf '%s' "$OVH_ENDPOINT"        > "$tmpdir/endpoint"
+          printf '%s' "$OVH_APP_KEY"         > "$tmpdir/applicationKey"
+          printf '%s' "$OVH_APP_SECRET"      > "$tmpdir/applicationSecret"
+          printf '%s' "$OVH_CONSUMER_KEY"    > "$tmpdir/consumerKey"
           kubectl create secret generic ovh-credentials \
             --namespace=fleet-default \
-            --from-literal=endpoint="$OVH_ENDPOINT" \
-            --from-literal=applicationKey="$OVH_APP_KEY" \
-            --from-literal=applicationSecret="$OVH_APP_SECRET" \
-            --from-literal=consumerKey="$OVH_CONSUMER_KEY"
+            --from-file=endpoint="$tmpdir/endpoint" \
+            --from-file=applicationKey="$tmpdir/applicationKey" \
+            --from-file=applicationSecret="$tmpdir/applicationSecret" \
+            --from-file=consumerKey="$tmpdir/consumerKey"
 
       - name: Apply ClusterClass
         run: |
@@ -118,7 +133,7 @@ jobs:
         with:
           name: e2e-logs
           path: /tmp/*.log
-          retention-days: 7
+          retention-days: 1
 
       - name: Cleanup OVH resources
         if: always()
