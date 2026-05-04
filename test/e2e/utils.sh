@@ -18,6 +18,11 @@ log_test() {
   echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
+# Test counters — initialised here so callers using `set -u` don't trip.
+: "${TESTS_PASSED:=0}"
+: "${TESTS_FAILED:=0}"
+: "${TESTS_SKIPPED:=0}"
+
 pass_test() { TESTS_PASSED=$((TESTS_PASSED + 1)); log_ok "$1"; }
 fail_test() { TESTS_FAILED=$((TESTS_FAILED + 1)); log_fail "$1"; }
 skip_test() { TESTS_SKIPPED=$((TESTS_SKIPPED + 1)); log_warn "SKIP: $1"; }

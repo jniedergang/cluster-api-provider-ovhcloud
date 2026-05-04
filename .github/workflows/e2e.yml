@@ -132,10 +132,15 @@ jobs:
       - name: Collect logs on failure
         if: failure()
         run: |
-          kubectl logs -n capiovh-system deploy/capiovh-controller-manager --tail=100 > /tmp/controller.log 2>&1 || true
-          kubectl get cluster,ovhcluster,ovhmachine,machine -A -o yaml > /tmp/resources.yaml 2>&1 || true
-          kubectl describe pod -n capiovh-system -l control-plane=controller-manager > /tmp/pod-describe.log 2>&1 || true
-          kubectl get events -n capiovh-system --sort-by=.lastTimestamp > /tmp/events.log 2>&1 || true
+          # Full controller log (no --tail), so we see the actual reconcile
+          # attempts and OVH API errors instead of just the startup banner.
+          kubectl logs -n capiovh-system deploy/capiovh-controller-manager > /tmp/controller.log 2>&1 || true
+          kubectl logs -n capi-system        deploy/capi-controller-manager        > /tmp/capi.log 2>&1 || true
+          kubectl logs -n rke2-bootstrap-system    deploy/rke2-bootstrap-controller-manager    > /tmp/rke2-bootstrap.log 2>&1 || true
+          kubectl logs -n rke2-control-plane-system deploy/rke2-control-plane-controller-manager > /tmp/rke2-cp.log 2>&1 || true
+          kubectl get cluster,ovhcluster,ovhmachine,machine,machinedeployment,kubeadmcontrolplane,rke2controlplane -A -o yaml > /tmp/resources.log 2>&1 || true
+          kubectl describe cluster,ovhcluster,ovhmachine -n fleet-default > /tmp/describe.log 2>&1 || true
+          kubectl get events -A --sort-by=.lastTimestamp > /tmp/events.log 2>&1 || true
           docker exec capiovh-e2e-control-plane crictl --runtime-endpoint unix:///run/containerd/containerd.sock images > /tmp/crictl-images.log 2>&1 || true
 
       - name: Upload logs
