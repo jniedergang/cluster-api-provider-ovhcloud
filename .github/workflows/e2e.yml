@@ -67,8 +67,15 @@ jobs:
         run: |
           IMG_FULL=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}-amd64:e2e
           make docker-build IMG=${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }} TAG=e2e ARCH=amd64
+          # Bridge podman -> docker -> kind. kind load docker-image looks up
+          # the docker daemon (which is the runtime kind itself uses on the
+          # GH runner), so transit through docker load instead of relying on
+          # kind load image-archive which has shown silent failures across
+          # kind versions / podman OCI archive variants.
           podman save --format docker-archive "$IMG_FULL" -o /tmp/capiovh.tar
-          kind load image-archive /tmp/capiovh.tar --name capiovh-e2e
+          docker load -i /tmp/capiovh.tar
+          docker image inspect "$IMG_FULL" >/dev/null
+          kind load docker-image "$IMG_FULL" --name capiovh-e2e
           docker exec capiovh-e2e-control-plane crictl images | grep cluster-api-provider-ovhcloud
 
       - name: Deploy CAPIOVH
