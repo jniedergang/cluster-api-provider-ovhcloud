@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       region:
-        description: "OVH region to test in"
+        description: "OVH region to test in (must match where the SSH key is registered)"
         required: false
-        default: "GRA9"
+        default: "EU-WEST-PAR"
         type: string
   schedule:
     - cron: "0 3 * * 1"  # weekly Monday 3 AM UTC
@@ -19,7 +19,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: cluster-api-provider-ovhcloud
   ORG: ${{ github.repository_owner }}
-  OVH_REGION: ${{ inputs.region || 'GRA9' }}
+  OVH_REGION: ${{ inputs.region || 'EU-WEST-PAR' }}
 
 permissions:
   contents: read
