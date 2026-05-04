@@ -118,6 +118,10 @@ jobs:
 
       - name: Run E2E lifecycle test
         env:
+          OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
+          OVH_APP_KEY: ${{ secrets.OVH_APP_KEY }}
+          OVH_APP_SECRET: ${{ secrets.OVH_APP_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
           OVH_SERVICE_NAME: ${{ secrets.OVH_SERVICE_NAME }}
           OVH_FLOATING_NETWORK_ID: ${{ secrets.OVH_FLOATING_NETWORK_ID }}
           OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
