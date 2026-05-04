@@ -110,6 +110,34 @@ replacements:
       delimiter: .
       index: 0
 
+# Service.metadata.name -> CRD conversion webhook service ref.
+# kustomize namePrefix renames the Service (webhook-service ->
+# capiovh-webhook-service) but does not propagate to clientConfig.service.name
+# inside CRDs, so CAPI's topology controller hits a 'service not found' on
+# every Cluster create. Sync explicitly via replacement.
+- source:
+    kind: Service
+    version: v1
+    name: webhook-service
+    fieldPath: metadata.name
+  targets:
+  - select:
+      kind: CustomResourceDefinition
+    fieldPaths:
+    - spec.conversion.webhook.clientConfig.service.name
+
+# Service.metadata.namespace -> CRD conversion webhook service namespace.
+- source:
+    kind: Service
+    version: v1
+    name: webhook-service
+    fieldPath: metadata.namespace
+  targets:
+  - select:
+      kind: CustomResourceDefinition
+    fieldPaths:
+    - spec.conversion.webhook.clientConfig.service.namespace
+
 # CAPI provider labels (required by clusterctl + Rancher Turtles for discovery).
 labels:
 - pairs:
