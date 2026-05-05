@@ -93,24 +93,32 @@ EOF
 # ---- Step 3: wait for OVHCluster Ready, CP init=true, 2 nodes Ready ----
 start=$(date +%s)
 last_state=""
+last_log=$start
+
+# Disable -e/-pipefail inside the polling loop. Transient kubectl/apiserver
+# blips (RKE2 supervisor restart, etcd leader rotation, secret not yet
+# materialized, kube-apiserver TLS handshake EOF on a freshly-booting CP)
+# must not abort the whole test — keep polling until success or timeout.
+set +eo pipefail
 
 while true; do
   elapsed=$(( $(date +%s) - start ))
   if [ "$elapsed" -gt "$TIMEOUT_CLUSTER_READY" ]; then
+    set -eo pipefail
     fail_test "timeout after ${elapsed}s waiting for cluster Ready"
     break
   fi
 
-  phase=$(kubectl -n "$NAMESPACE" get cluster "$CLUSTER_NAME" -o jsonpath='{.status.phase}' 2>/dev/null || true)
-  ovhc_ready=$(kubectl -n "$NAMESPACE" get ovhcluster -l cluster.x-k8s.io/cluster-name="$CLUSTER_NAME" -o jsonpath='{.items[0].status.ready}' 2>/dev/null || true)
-  cp_init=$(kubectl -n "$NAMESPACE" get rke2controlplane -l cluster.x-k8s.io/cluster-name="$CLUSTER_NAME" -o jsonpath='{.items[0].status.initialized}' 2>/dev/null || true)
+  phase=$(kubectl -n "$NAMESPACE" get cluster "$CLUSTER_NAME" -o jsonpath='{.status.phase}' 2>/dev/null)
+  ovhc_ready=$(kubectl -n "$NAMESPACE" get ovhcluster -l cluster.x-k8s.io/cluster-name="$CLUSTER_NAME" -o jsonpath='{.items[0].status.ready}' 2>/dev/null)
+  cp_init=$(kubectl -n "$NAMESPACE" get rke2controlplane -l cluster.x-k8s.io/cluster-name="$CLUSTER_NAME" -o jsonpath='{.items[0].status.initialized}' 2>/dev/null)
 
   # Check nodes in the workload cluster
   kc_secret="${CLUSTER_NAME}-kubeconfig"
   workload_nodes_ready=0
   if kubectl -n "$NAMESPACE" get secret "$kc_secret" >/dev/null 2>&1; then
-    kubectl -n "$NAMESPACE" get secret "$kc_secret" -o jsonpath='{.data.value}' 2>/dev/null | \
-      base64 -d > "/tmp/test-${CLUSTER_NAME}.kc" 2>/dev/null || true
+    kubectl -n "$NAMESPACE" get secret "$kc_secret" -o jsonpath='{.data.value}' 2>/dev/null \
+      | base64 -d > "/tmp/test-${CLUSTER_NAME}.kc" 2>/dev/null
     if [ -s "/tmp/test-${CLUSTER_NAME}.kc" ]; then
       workload_nodes_ready=$(KUBECONFIG="/tmp/test-${CLUSTER_NAME}.kc" kubectl get nodes --no-headers 2>/dev/null | awk 'BEGIN{n=0} $2=="Ready"{n++} END{print n}')
     fi
@@ -118,12 +126,15 @@ while true; do
   workload_nodes_ready="${workload_nodes_ready:-0}"
 
   state="phase=$phase ovhc=$ovhc_ready cp_init=$cp_init nodes_ready=$workload_nodes_ready"
-  if [ "$state" != "$last_state" ]; then
+  now=$(date +%s)
+  if [ "$state" != "$last_state" ] || [ "$(( now - last_log ))" -ge 60 ]; then
     log_info "[${elapsed}s] $state"
     last_state="$state"
+    last_log=$now
   fi
 
   if [ "$workload_nodes_ready" -ge "2" ]; then
+    set -eo pipefail
     pass_test "Cluster $CLUSTER_NAME reached 2 Ready nodes in ${elapsed}s"
     break
   fi
@@ -131,29 +142,46 @@ while true; do
   sleep "$POLL_INTERVAL"
 done
 
+set -eo pipefail
+
 # ---- Step 4: cleanup ----
 log_info "Deleting Cluster $CLUSTER_NAME"
 kubectl -n "$NAMESPACE" delete cluster "$CLUSTER_NAME" --wait=false >/dev/null 2>&1 || true
 
-# Wait for all CRs to be gone
+# Wait for all CRs to be gone — same hardening as the readiness loop:
+# transient kubectl errors must not abort the whole test.
 del_start=$(date +%s)
+last_remaining=""
+last_log=$del_start
+set +eo pipefail
+
 while true; do
   elapsed=$(( $(date +%s) - del_start ))
   if [ "$elapsed" -gt "$TIMEOUT_DELETE" ]; then
+    set -eo pipefail
     fail_test "timeout after ${elapsed}s waiting for cluster deletion"
     break
   fi
 
-  remaining=$(kubectl -n "$NAMESPACE" get cluster,ovhcluster,machine -l cluster.x-k8s.io/cluster-name="$CLUSTER_NAME" --no-headers 2>/dev/null | wc -l)
+  remaining=$(kubectl -n "$NAMESPACE" get cluster,ovhcluster,machine -l cluster.x-k8s.io/cluster-name="$CLUSTER_NAME" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  remaining="${remaining:-?}"
 
   if [ "$remaining" = "0" ]; then
+    set -eo pipefail
     pass_test "Cluster $CLUSTER_NAME fully deleted in ${elapsed}s"
     break
   fi
 
-  log_info "[${elapsed}s] $remaining CAPI resources remaining"
+  now=$(date +%s)
+  if [ "$remaining" != "$last_remaining" ] || [ "$(( now - last_log ))" -ge 60 ]; then
+    log_info "[${elapsed}s] $remaining CAPI resources remaining"
+    last_remaining=$remaining
+    last_log=$now
+  fi
   sleep "$POLL_INTERVAL"
 done
+
+set -eo pipefail
 
 # ---- Step 5: verify OVH is clean ----
 inst_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/instance" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
