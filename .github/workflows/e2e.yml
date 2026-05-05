@@ -116,6 +116,22 @@ jobs:
           kubectl apply -n fleet-default \
             -f templates/clusterclass/rke2/clusterclass-ovhcloud-rke2.yaml
 
+      - name: Pre-test OVH cleanup
+        env:
+          OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
+          OVH_APP_KEY: ${{ secrets.OVH_APP_KEY }}
+          OVH_APP_SECRET: ${{ secrets.OVH_APP_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+          OVH_SERVICE_NAME: ${{ secrets.OVH_SERVICE_NAME }}
+          OVH_OS_USERNAME: ${{ secrets.OVH_OS_USERNAME }}
+          OVH_OS_PASSWORD: ${{ secrets.OVH_OS_PASSWORD }}
+        run: |
+          # Install openstack CLI for router cleanup (only the routers OVH
+          # creates as a side-effect of LB FIPs are not visible via the
+          # native API, only via Neutron).
+          pip install --quiet python-openstackclient
+          ./test/e2e/pre-cleanup.sh
+
       - name: Run E2E lifecycle test
         env:
           OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
