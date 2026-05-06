@@ -145,6 +145,15 @@ done
 set -eo pipefail
 
 # ---- Step 4: cleanup ----
+# E2E_KEEP_ON_FAIL=1 lets the next workflow step SSH into the still-running
+# OVH instance to grab cloud-init / RKE2 logs. The post-job 'Cleanup OVH
+# resources' step in the CI workflow takes care of tearing everything down
+# afterwards so we don't leak.
+if [ "${TESTS_FAILED:-0}" -gt 0 ] && [ "${E2E_KEEP_ON_FAIL:-0}" = "1" ]; then
+  log_warn "E2E_KEEP_ON_FAIL=1 and a test already failed; skipping cluster delete to preserve instance for debug"
+  exit 1
+fi
+
 log_info "Deleting Cluster $CLUSTER_NAME"
 kubectl -n "$NAMESPACE" delete cluster "$CLUSTER_NAME" --wait=false >/dev/null 2>&1 || true
 

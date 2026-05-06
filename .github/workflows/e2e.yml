@@ -141,9 +141,27 @@ jobs:
           OVH_SERVICE_NAME: ${{ secrets.OVH_SERVICE_NAME }}
           OVH_FLOATING_NETWORK_ID: ${{ secrets.OVH_FLOATING_NETWORK_ID }}
           OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+          E2E_KEEP_ON_FAIL: "1"
         run: |
           ./test/e2e/run-full-cluster-test.sh "e2e-ci-$(date +%s | tail -c 6)"
         timeout-minutes: 30
+
+      - name: SSH-collect cloud-init / RKE2 logs from instances on failure
+        if: failure()
+        env:
+          OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
+          OVH_APP_KEY: ${{ secrets.OVH_APP_KEY }}
+          OVH_APP_SECRET: ${{ secrets.OVH_APP_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+          OVH_SERVICE_NAME: ${{ secrets.OVH_SERVICE_NAME }}
+          OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+        run: |
+          ./test/e2e/collect-instance-logs.sh || true
+          # surface the collected per-instance logs as workflow artifacts
+          if [ -d /tmp/instance-logs ]; then
+            cp /tmp/instance-logs/*.log /tmp/ 2>/dev/null || true
+            cp /tmp/instance-logs/instances.txt /tmp/instances.log 2>/dev/null || true
+          fi
 
       - name: Collect logs on failure
         if: failure()
