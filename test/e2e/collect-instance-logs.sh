@@ -45,7 +45,7 @@ for inst in json.load(sys.stdin):
   pub = next((a["ip"] for a in inst.get("ipAddresses", [])
               if a.get("type") == "public" and a.get("version") == 4), "")
   if pub and inst.get("status") == "ACTIVE":
-    print(f"{inst[\"id\"]} {inst[\"name\"]} {pub}")
+    print(inst["id"], inst["name"], pub)
 ' > "$OUT/instances.txt"
 cat "$OUT/instances.txt"
 

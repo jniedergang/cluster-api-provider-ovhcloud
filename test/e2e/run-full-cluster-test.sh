@@ -193,10 +193,22 @@ done
 set -eo pipefail
 
 # ---- Step 5: verify OVH is clean ----
+# Count only resources that are still genuinely live. OVH's FIP reaper is
+# async: once we issue DeleteFloatingIP and the FIP transitions to
+# status=down/associatedEntity=null, OVH lists it for a few more minutes
+# before truly dropping it — that is not a leak from the controller's POV.
 inst_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/instance" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
 lb_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/region/${OVH_REGION}/loadbalancing/loadbalancer" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
 net_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/network/private" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
-fip_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/region/${OVH_REGION}/floatingip" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
+fip_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/region/${OVH_REGION}/floatingip" | python3 -c '
+import json, sys
+fips = json.load(sys.stdin)
+# A real leak is a FIP that is still active or still attached. A FIP that
+# is "down" with no associatedEntity has been deleted from our side and
+# is awaiting async garbage collection by OVH.
+live = [f for f in fips if f.get("status") != "down" or f.get("associatedEntity") is not None]
+print(len(live))
+')
 gw_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/region/${OVH_REGION}/gateway" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
 
 log_info "OVH residuals: inst=$inst_count LBs=$lb_count nets=$net_count FIPs=$fip_count gws=$gw_count"
