@@ -31,9 +31,11 @@ CLUSTER_NAME="${1:-capitest-$(date +%s)}"
 NAMESPACE="fleet-default"
 K8S_VERSION="${K8S_VERSION:-v1.31.4+rke2r1}"
 
-TIMEOUT_CLUSTER_READY=900 # 15 min
-TIMEOUT_NODES_READY=600   # 10 min after CP ready
-TIMEOUT_DELETE=600        # 10 min for full delete
+TIMEOUT_CLUSTER_READY=1800 # 30 min — OVH LB provisioning is highly variable
+                            # (observed 2 min on a good day, 14+ min when slow,
+                            # plus the actual RKE2 install time on the CP node).
+TIMEOUT_NODES_READY=600    # 10 min after CP ready
+TIMEOUT_DELETE=600         # 10 min for full delete
 POLL_INTERVAL=15
 
 log_info "=== Test: create full cluster $CLUSTER_NAME, wait Ready, delete, verify ==="

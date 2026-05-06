@@ -49,12 +49,30 @@ for id in $(ovh GET "/cloud/project/$OVH_SERVICE_NAME/instance" | python3 -c 'im
 done
 
 # --- 2. Delete all load balancers (async) ---
+# OVH refuses DELETE on LBs in PENDING_CREATE / PENDING_DELETE; we skip them
+# and let the per-project quota absorb the orphan. Fresh test runs use
+# distinct LB names so a stuck LB does not block a new one.
 log "Step 2: load balancers"
-LB_IDS=$(ovh GET "/cloud/project/$OVH_SERVICE_NAME/region/$OVH_REGION/loadbalancing/loadbalancer" | python3 -c 'import json,sys; [print(l["id"]) for l in json.load(sys.stdin)]' 2>/dev/null || true)
-for id in $LB_IDS; do
-  log "  delete LB $id"
-  ovh DELETE "/cloud/project/$OVH_SERVICE_NAME/region/$OVH_REGION/loadbalancing/loadbalancer/$id" >/dev/null
-done
+ovh GET "/cloud/project/$OVH_SERVICE_NAME/region/$OVH_REGION/loadbalancing/loadbalancer" \
+  | python3 -c '
+import json, sys
+for l in json.load(sys.stdin):
+  status = l.get("provisioningStatus", "")
+  print(l["id"], status)
+' > /tmp/_lbs.txt
+while read -r id status; do
+  if [ -z "$id" ]; then continue; fi
+  case "$status" in
+    PENDING_*|creating)
+      log "  skip stuck LB $id ($status) — orphan, OVH will reap eventually"
+      ;;
+    *)
+      log "  delete LB $id ($status)"
+      ovh DELETE "/cloud/project/$OVH_SERVICE_NAME/region/$OVH_REGION/loadbalancing/loadbalancer/$id" >/dev/null
+      ;;
+  esac
+done < /tmp/_lbs.txt
+LB_IDS=$(awk '$2 !~ /^PENDING_/ && $2 != "creating" {print $1}' /tmp/_lbs.txt)
 
 # --- 3. Wait for LB deletion (releases the FIPs and routers) ---
 if [ -n "$LB_IDS" ]; then
