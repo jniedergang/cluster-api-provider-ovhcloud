@@ -90,8 +90,68 @@ beyond a tiny LB during the idempotency test.
 Unit and envtest run automatically on every PR via
 [.github/workflows/test.yml](../.github/workflows/test.yml).
 
-E2E is run manually before each release. Automating it in CI would require
-a dedicated OVH project budget; not currently planned.
+E2E is automated in [.github/workflows/e2e.yml](../.github/workflows/e2e.yml)
+and runs against a real OVH project. Triggers: weekly cron (Monday 03:00 UTC)
++ manual `workflow_dispatch`. Typical green run completes in ~16 minutes
+(provisioning ~8 min, full delete ~2 min, plus setup/teardown).
+
+### Workflow steps
+
+1. **Pre-test OVH cleanup** — runs [`test/e2e/pre-cleanup.sh`](../test/e2e/pre-cleanup.sh)
+   which wipes any leftover instances/LBs/FIPs/routers/networks in the test
+   project before the run starts. Idempotent on an empty project. Skips
+   load balancers stuck in `PENDING_CREATE`/`PENDING_DELETE` (OVH refuses
+   `DELETE` in those states, the project quota absorbs them).
+2. **Run E2E lifecycle test** — [`test/e2e/run-full-cluster-test.sh`](../test/e2e/run-full-cluster-test.sh)
+   creates a `Cluster` with `topology.class=ovhcloud-rke2`, polls for
+   2 Ready nodes (timeout 30 min), deletes, verifies OVH residuals.
+   `E2E_KEEP_ON_FAIL=1` keeps the OVH instance alive on failure so the
+   next step can SSH in.
+3. **SSH-collect cloud-init / RKE2 logs (on failure)** — [`test/e2e/collect-instance-logs.sh`](../test/e2e/collect-instance-logs.sh)
+   lists ACTIVE instances with public IPs and grabs their cloud-init
+   status, `cloud-init-output.log`, RKE2 systemd unit + journal,
+   `/etc/rancher/rke2/config.yaml`. Uploaded as workflow artifacts
+   alongside controller logs.
+4. **Cleanup OVH resources** — always runs to avoid leaks.
+
+### Required secrets (GitHub environment `ovh`)
+
+The job binds to a GitHub deployment environment `ovh` with required
+reviewer protection (manual approval before each run). Push secrets via
+stdin so values never appear in process arguments:
+
+```
+gh secret set OVH_ENDPOINT          --env ovh --repo <repo>   # e.g. "ovh-ca"
+gh secret set OVH_APP_KEY           --env ovh --repo <repo>
+gh secret set OVH_APP_SECRET        --env ovh --repo <repo>
+gh secret set OVH_CONSUMER_KEY      --env ovh --repo <repo>
+gh secret set OVH_SERVICE_NAME      --env ovh --repo <repo>   # OVH project ID
+gh secret set OVH_FLOATING_NETWORK_ID --env ovh --repo <repo> # Ext-Net IPv4 subnet UUID
+gh secret set OVH_SSH_KEY           --env ovh --repo <repo>   # registered name
+gh secret set OVH_SSH_PRIVATE_KEY   --env ovh --repo <repo>   # matching priv key
+gh secret set OVH_OS_USERNAME       --env ovh --repo <repo>   # OpenStack admin
+gh secret set OVH_OS_PASSWORD       --env ovh --repo <repo>   # OpenStack admin
+```
+
+`OVH_OS_USERNAME` / `OVH_OS_PASSWORD` are only needed by the pre-cleanup
+script for router cleanup (the OVH native API has no router endpoint;
+internal routers created as a side-effect of LB FIPs are visible only via
+Neutron). Get them by creating an "OpenStack user" in the OVH manager
+under the same project.
+
+`OVH_SSH_KEY` must be registered via `POST /cloud/project/{sn}/sshkey`
+(OVH native API). A keypair created with `openstack keypair create` is
+**not** visible to the controller — see
+[ovh-credentials-guide.md](ovh-credentials-guide.md#ssh-key-pitfall).
+
+### Tuning
+
+- `TIMEOUT_CLUSTER_READY` (script default 1800s / 30 min) — bump higher
+  if your project consistently hits slow OVH LB provisioning.
+- `timeout-minutes: 50` on the workflow step — covers cluster Ready +
+  delete + verify with margin.
+- `concurrency.group: e2e-<repo>` — only one E2E run at a time,
+  prevents two runs racing on the same OVH project.
 
 ## Production readiness validation matrix
 
@@ -167,7 +227,7 @@ Status legend: ✅ passed live | ⚠️ passed with caveat | ❌ blocked | ⏳ p
 | 28 | DNS record creation                                   | ⚠️      | v0.4.0    | Code is correct but requires OVH API credentials with `/domain/*` scope. Current credentials only have `/cloud/*` scope → 403 Forbidden. The controller gracefully skips DNS when the scope is missing |
 | 29 | Cluster autoscaler annotations                        | ⚠️      | v0.4.0    | ClusterClass variables removed — CAPI MachineDeployment annotations cannot be set via ClusterClass patches. Must be set in `Cluster.spec.topology.workers.machineDeployments[].metadata.annotations`. Documented in ClusterClass comments |
 | 30 | MachinePool CRD                                       | ⚠️      | v0.4.0    | CRD type defined but no controller implemented. CRD not included in kustomize default overlay. Requires `OVHMachinePoolReconciler` to be functional |
-| 31 | E2E CI workflow                                       | ⚠️      | v0.4.0    | `.github/workflows/e2e.yml` created. Not executed — requires GitHub repository secrets (`OVH_APP_KEY`, etc.) configured by the repo admin |
+| 31 | E2E CI workflow                                       | ✅      | v0.5.0    | `.github/workflows/e2e.yml` validated end-to-end against live OVH (run 25423400091, SHA 62e39ee, 2026-05-06): pre-cleanup → cluster create → 2 Ready nodes in 463s → full delete in 136s → 0 OVH residuals. Bound to a `ovh` GitHub environment with required reviewer. See [CI integration](#ci-integration) for setup |
 | 32 | `disableCloudController` ClusterClass variable        | ✅      | v0.3.1    | Writes `disable-cloud-controller: true` to RKE2 config on CP + worker. Validated live when deploying OpenStack CCM |
 | 33 | Gateway expose idempotence                            | ✅      | v0.3.1    | `ExposeGateway` treats 409 Conflict as success. Eliminates ~250 spurious errors/12h in controller logs |
 

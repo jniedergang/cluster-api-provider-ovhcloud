@@ -247,6 +247,139 @@ and the cluster stays Pending in Rancher UI.
    import URL **and** patch the agent Deployment to mount the ConfigMap.
    The script is idempotent.
 
+### `SSH key "..." not found` — even though `openstack keypair list` shows it
+
+OVH has **two parallel SSH key inventories**:
+
+- The **OpenStack Nova** keypair store, populated by
+  `openstack keypair create`. Visible only via the OpenStack API.
+- The **OVH native** SSH key store at `/cloud/project/{sn}/sshkey`,
+  populated by the OVH manager UI or `POST /cloud/project/{sn}/sshkey`.
+
+CAPIOVH uses the OVH native API to resolve the SSH key by name. A keypair
+created via `openstack keypair create` will not appear in the native API
+and the controller will fail with `resolving SSH key "<name>": SSH key
+"<name>" not found` — even though `openstack keypair list` happily lists it.
+
+**Fix**: register the public key via the OVH native API:
+
+```bash
+curl -X POST https://eu.api.ovh.com/1.0/cloud/project/$SN/sshkey \
+  -H "X-Ovh-Application: $AK" -H "X-Ovh-Consumer: $CK" \
+  -H "X-Ovh-Timestamp: $TS"  -H "X-Ovh-Signature: $SIG" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"capiovh-e2e","publicKey":"ssh-ed25519 AAAA... me","region":"EU-WEST-PAR"}'
+```
+
+See [ovh-credentials-guide.md](ovh-credentials-guide.md#ssh-key-pitfall).
+
+### SSH key found in one region but not the other
+
+OVH SSH keys are **region-scoped**. The `regions` field on the SSH key
+record lists every region the key is registered in. A key created in
+`EU-WEST-PAR` is invisible from `GRA9` reconciles and vice versa. If the
+controller flips between regions (e.g. via `inputs.region` in the e2e
+workflow), make sure the key exists in every target region — or
+re-register it via `POST /cloud/project/{sn}/sshkey` with the new region.
+
+### `A private network already exists for this vlan ID`
+
+OVH considers `vlanId` to be **project-scoped, not region-scoped**.
+Creating a private network with `vlanId: 0` in `GRA9`, then attempting
+the same `vlanId: 0` in `EU-WEST-PAR` returns:
+
+```
+400 Client::BadRequest: A private network already exists for this vlan ID (network id pn-NNNNNN_0)
+```
+
+**Fix**: use distinct `vlanId` per cluster (the
+`templates/clusterclass/rke2/clusterclass-ovhcloud-rke2.yaml` already
+exposes a `vlanID` topology variable for this), or delete the existing
+network first. The DELETE path expects the **full vlanId-suffixed ID**:
+`DELETE /cloud/project/{sn}/network/private/pn-NNNNNN_0`, not
+`pn-NNNNNN`.
+
+### Network DELETE returns `Port X has device owner network:router_interface_distributed`
+
+Symptom: trying to delete an OVH private network returns 409 with the
+error above. Cause: a CAPIOVH-created internal router (named
+`capi-<cluster>-gw`) still has an interface on the subnet.
+
+**Cleanup ordering** (also implemented in
+[`test/e2e/pre-cleanup.sh`](../test/e2e/pre-cleanup.sh)):
+
+1. `DELETE` the load balancer (async, ~30–60 s).
+2. Wait for the LB list to become empty.
+3. `DELETE` every floating IP for the project/region.
+4. Find the router with `openstack router list` (filter by
+   `capi-<cluster>-gw`), then `openstack router remove subnet ROUTER
+   SUBNET` followed by `openstack router delete ROUTER`. The OVH
+   native API has no router endpoint — Neutron is the only path.
+5. `DELETE /cloud/project/{sn}/network/private/{netId}_{vlanId}`.
+
+### Floating IPs accumulate after multiple test runs
+
+Each LB the controller creates allocates a FIP, which in turn binds an
+internal Neutron router. Default project quota is `maxGateways: 2`. After
+~2 leaked FIPs (or even sometimes after a clean delete, due to OVH async
+reaping latency), new LB FIP allocations 409 with:
+
+```
+Client::MaxQuotaReached::Router: "conflict: max quota of 2 reached for: router"
+```
+
+`openstack router list` may even show **zero** routers at this point —
+OVH's internal accounting and the user-visible Neutron list are not the
+same set of objects.
+
+**Fix**: run the pre-cleanup script. FIPs in `status: down` with
+`associatedEntity: null` are CAPIOVH-deleted and pending OVH async reap;
+they are not real leaks but they do hold the quota slot until OVH garbage
+collects them (a few minutes). Pre-cleanup deletes them explicitly so the
+next run starts on a clean slate.
+
+### Load balancer wedged in `PENDING_CREATE`
+
+OVH occasionally leaves a load balancer in `provisioningStatus:
+PENDING_CREATE` indefinitely (observed: 30+ minutes after the create
+POST, no further updates). In this state OVH refuses any `DELETE`:
+
+```
+409 Client::Conflict: "Invalid state PENDING_CREATE of loadbalancer resource <id>"
+```
+
+This is an OVH-side issue, not a CAPIOVH bug. The wedged LB occupies one
+slot in the per-project LB quota (default `maxLoadbalancers: 5`); fresh
+test runs use timestamped names so a stuck LB never blocks a new one.
+
+The pre-cleanup script skips LBs in `PENDING_CREATE` / `PENDING_DELETE`
+with a warning. If they become a quota problem, open a ticket with OVH
+support to force-delete them.
+
+### Cluster reaches `Provisioned` but `RKE2ControlPlane.status.initialized` stays empty
+
+The OVHCluster reaches Ready, the OVH instance reaches ACTIVE, but the
+control plane never initializes. The CAPIOVH controller logs repeatedly
+emit `failed to get workload node for init: dial tcp <fipAddr>:6443:
+i/o timeout` (or `EOF`).
+
+The infrastructure is fine: kube-apiserver hasn't started inside the
+instance. Causes seen in practice:
+
+- LB provisioning took 14+ minutes and the test timed out before RKE2
+  could install. **Fix**: `TIMEOUT_CLUSTER_READY=1800` (already the
+  default) gives RKE2 ~20 min after the LB becomes ACTIVE.
+- cloud-init failed to fetch the RKE2 binary because DNS in the VM
+  pointed at the OVH default resolver (no public DNS). See "DNS
+  resolution failure inside RKE2 nodes (vRack DHCP)" above. Fixed in
+  v0.1.3+.
+- Wrong SSH key registered → instance booted but cloud-init had the
+  wrong fingerprint. See SSH key sections above.
+
+To diagnose live: trigger the e2e workflow which automatically SSH-
+collects `cloud-init-output.log` and the `rke2-server` journal from the
+failed instance — see [TESTING.md](TESTING.md#ci-integration).
+
 ## Where to ask for help
 
 - GitHub issues: https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/issues

@@ -151,3 +151,39 @@ me := map[string]interface{}{}
 client.Get("/me", &me)
 fmt.Println(me["nichandle"])  // Affiche le NIC handle OVH
 ```
+
+## SSH key pitfall
+
+CAPIOVH resolves the SSH key referenced by `OVHMachine.spec.sshKeyName`
+through the **OVH native API**:
+
+```
+GET /cloud/project/{serviceName}/sshkey
+```
+
+OVH maintains **two parallel SSH key inventories** that do NOT sync:
+
+| | OpenStack Nova keypair store | OVH native SSH key store |
+|---|---|---|
+| Created via | `openstack keypair create` | OVH manager UI, OR `POST /cloud/project/{sn}/sshkey` |
+| Listed via | `openstack keypair list` | `GET /cloud/project/{sn}/sshkey` |
+| Visible to CAPIOVH | **NO** | YES |
+
+If you create the keypair with `openstack keypair create`, the controller
+will fail with `resolving SSH key "<name>": SSH key "<name>" not found`,
+even though the OpenStack CLI happily lists it.
+
+**Always register via the OVH native API**:
+
+```bash
+# After exporting OVH_* env vars and computing the signature (see SDK Go)
+curl -X POST "https://${EP_HOST}.api.ovh.com/1.0/cloud/project/${SERVICE_NAME}/sshkey" \
+  -H "X-Ovh-Application: $AK" -H "X-Ovh-Consumer: $CK" \
+  -H "X-Ovh-Timestamp: $TS"  -H "X-Ovh-Signature: $SIG" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"capiovh-key","publicKey":"ssh-ed25519 AAAA... me","region":"EU-WEST-PAR"}'
+```
+
+OVH SSH keys are also **region-scoped** (the response includes a
+`regions: [...]` array). Register the key in every region where you
+intend to provision OVHMachines.
