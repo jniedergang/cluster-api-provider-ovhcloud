@@ -252,11 +252,13 @@ CONTROLLER_TOOLS_VERSION ?= v0.16.5
 # which breaks Go 1.24 builds. Bump together with the Go toolchain.
 ENVTEST_VERSION ?= v0.0.0-20250827215931-c4304622a139
 
-KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || { curl -Ss $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
+	# Install via `go install` (GOPROXY, no rate limit) rather than the
+	# upstream install_kustomize.sh which hits the GitHub Releases API
+	# anonymously and routinely 403s on shared GH Actions runner IPs.
+	test -s $(LOCALBIN)/kustomize || GOBIN=$(LOCALBIN) go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
