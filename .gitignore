@@ -23,4 +23,6 @@ out/
 
 # Secrets - never commit
 secrets.env
+.env
+.env.*
 *.age
