@@ -7,6 +7,150 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed (CI / test infrastructure)
+
+- E2E workflow now runs reliably against the live OVH project. Fifteen
+  fixes collected during the first end-to-end green run: corrected
+  invalid `actions/upload-artifact` SHA pin; bridged `podman` build to
+  `kind` via `docker load`; routed image through `docker-archive`
+  rather than OCI archive; overrode the hardcoded upstream image in
+  `manager_image_patch.yaml`; enabled the `ClusterTopology` feature
+  gate for ClusterClass support; synced the conversion-webhook service
+  reference with the kustomize `namePrefix`; defaulted the test region
+  to `EU-WEST-PAR` (where the SSH key is registered); pass the full
+  OVH credential set to the E2E step; polling loop now survives
+  transient kubectl/apiserver errors with a 60 s heartbeat; FIPs in
+  `down + null associatedEntity` are no longer counted as leaks (they
+  are awaiting OVH async reap); tolerated slow OVH LB provisioning and
+  stuck `PENDING_CREATE` LBs; install `kustomize` via `go install`
+  instead of the GitHub-hosted script (avoids the anonymous rate
+  limit). See `4fc5589`, `62e39ee`, `01c0369`, `cefbbf4`, `d86f8c2`,
+  `3891bd5`, `4a72e26`, `d4da731`, `4c568c1`, `b99c6b7`, `3ca82c4`,
+  `bcfbd96`, `a003ad1`, `103d24d`, `6ee2643`, `5cb5dab`, `40d007c`.
+- New scripts `test/e2e/pre-cleanup.sh` and
+  `test/e2e/collect-instance-logs.sh`: wipe leftover OVH resources
+  before each run, and SSH into still-running instances on failure to
+  grab cloud-init / RKE2 logs.
+
+### Security
+
+- Workflow hardened against secret exfiltration on a public repo:
+  bound to a GitHub deployment environment `ovh` requiring manual
+  reviewer approval, secrets passed via stdin/files instead of
+  `--from-literal=$VAR`, artifact retention reduced to 1 day, branch
+  ruleset on `main` blocking force-push and deletion (`82fde50`).
+- `.gitignore` now covers `.env` and `.env.*` to prevent accidental
+  commit of locally-staged credentials (`63b2892`).
+
+### Added (UI extension)
+
+- Rancher Dashboard extension `ui/pkg/capiovh`: tile + product page
+  under "OVH Cloud" with create-cluster button and transition
+  messaging. Forked from the CAPI UI extension skeleton with
+  `@rancher/shell` v3 and `importTypes` auto-registration. Twenty-plus
+  iterative fixes converged on a single working tarball
+  (`extensions/capiovh/0.1.0.tgz`) loadable via a Rancher `UIPlugin`
+  CR. See the `feat(ui):` / `fix(ui):` series between `9dc8d4d` and
+  `c681c10`.
+
+### Added
+
+- **CAPI adopt** — zero-downtime migration of existing OVH-managed
+  clusters: `OVHCluster.spec.existingLoadBalancerID`,
+  `existingFloatingIPID`, and `OVHMachine.spec.existingInstanceID` let
+  the controller adopt pre-existing resources instead of creating new
+  ones. The annotation
+  `capiovh.cluster.x-k8s.io/adoption-policy: keep` preserves OVH
+  resources on `Cluster` deletion so operators can safely roll back
+  during the cutover (`6cdd58a`).
+
+### Changed
+
+- Routine Dependabot bumps:
+  `actions/checkout` 4.3.1→6.0.3, `actions/setup-go` 5.6.0→6.4.0,
+  `actions/upload-artifact` 4.6.2→7.0.1, `helm/kind-action` 1.12.0→1.14.0,
+  `sigstore/cosign-installer` 4.1.1→4.1.2, `golangci/golangci-lint-action`
+  9.2.0→9.2.1, `docker/login-action` 4.1.0→4.2.0,
+  `docker/build-push-action` 7.1.0→7.2.0,
+  `docker/setup-qemu-action` 4.0.0→4.1.0,
+  `docker/setup-buildx-action` 4.0.0→4.1.0,
+  `docker/metadata-action` 6.0.0→6.1.0, `bci/golang` 1.24.5→1.26.3,
+  `github.com/prometheus/client_golang` 1.22.0→1.23.2,
+  `github.com/go-logr/logr` 1.4.2→1.4.3.
+
+### Documentation
+
+- Documented the E2E workflow, required `ovh` environment secrets,
+  pre-cleanup / SSH-collect scripts, and timing knobs in
+  `docs/TESTING.md`.
+- Six new `docs/TROUBLESHOOTING.md` sections covering quirks
+  discovered live: SSH key not found despite `openstack keypair list`
+  showing it; region-scoped SSH keys; `vlanId` project-scoped
+  collision; network DELETE blocked by `router_interface_distributed`
+  port; FIP accumulation hitting the router quota; LB wedged in
+  `PENDING_CREATE`; `Provisioned`-but-no-init diagnostic flow.
+- New "SSH key pitfall" section in `docs/ovh-credentials-guide.md`
+  explaining the OpenStack vs OVH-native two-inventory split and the
+  curl recipe to register a key the controller can actually see.
+
+## [v0.5.0] - 2026-04-15
+
+### Added
+
+- **kubeadm ClusterClass** (`templates/clusterclass/kubeadm/`) as a
+  topology-based alternative to the RKE2 path.
+- **Registry mirror** support in cluster templates for air-gapped or
+  private-registry installs.
+- **Drain timeout** configurable per MachineDeployment.
+- **etcd S3 backup** topology variable for RKE2 control planes.
+- **Ignition bootstrap format** (`OVHMachine.spec.bootstrapFormat`)
+  in addition to the default cloud-init.
+
+See commit `733adaa` for the full set.
+
+## [v0.4.0] - 2026-04-15
+
+### Added
+
+- **Failure domains auto-discovery**: `OVHCluster.status.failureDomains`
+  is populated via `GetRegionInfo()`. Regions with multiple AZs (e.g.
+  GRA11) expose them to CAPI for per-machine placement.
+- **DNS record creation** (optional): controller creates an A record
+  for the LB FIP in an OVH DNS zone when `OVHCluster.spec.dnsConfig`
+  is set. Requires `/domain/*` scope on the OVH Consumer Key.
+- **Cluster autoscaler addon** manifest under `templates/addons/`.
+- **OVHMachinePool CRD** stub (reconciler not implemented yet).
+- **E2E CI workflow** scaffold (`.github/workflows/e2e.yml`) — finalized
+  in the Unreleased section above.
+
+### Changed
+
+- `OVHMachine.spec.metadata` field removed — OVH native API rejects
+  it as an unknown parameter on `POST /cloud/project/{sn}/instance`
+  (`5164b4a`).
+- Honest test results in `docs/TESTING.md`: features that did not
+  actually work were marked as such and removed from the topology
+  rather than leaving false ✅ rows (`ca560d0`).
+
+See commits `6db76fe` and `ca560d0` for the full set.
+
+## [v0.3.1] - 2026-04-15
+
+### Fixed
+
+- **Gateway expose idempotence**: `ExposeGateway` treats OVH's 409
+  Conflict response (gateway already exposed) as a success rather
+  than a hard error. Eliminates ~250 spurious errors per 12 h in the
+  controller logs.
+- **`disableCloudController` ClusterClass variable**: writes
+  `disable-cloud-controller: true` to the RKE2 config on CP and worker
+  nodes. Required when deploying the OpenStack CCM (which conflicts
+  with RKE2's built-in CCM).
+- **CSI test fixes**: chart versions and secret config in
+  `templates/addons/cinder-csi-helmchartconfig.yaml` corrected.
+
+See commit `7b3c846`.
+
 ## [v0.3.0] - 2026-04-15
 
 ### Breaking Changes

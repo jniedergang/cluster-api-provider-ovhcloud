@@ -2,6 +2,7 @@
 
 [![lint](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/actions/workflows/lint.yml/badge.svg)](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/actions/workflows/lint.yml)
 [![test](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/actions/workflows/test.yml/badge.svg)](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/actions/workflows/test.yml)
+[![e2e](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/actions/workflows/e2e.yml/badge.svg)](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/actions/workflows/e2e.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 A [Cluster API](https://cluster-api.sigs.k8s.io/) infrastructure provider
@@ -20,11 +21,20 @@ instances, and clean everything up on deletion.
   `Debian 12`, ...) or upload your own (e.g. openSUSE, SLES) via Glance
 - **RKE2 + kubeadm**: ready-to-use templates for both bootstrap providers
 - **ClusterClass**: topology-based clusters in ~30 lines of YAML
+  (`ovhcloud-rke2` and `ovhcloud-kubeadm`)
+- **MachineHealthCheck**: auto-created from ClusterClass for CP + workers
+- **Failure domains**: auto-discovered per region via OVH API
+- **CAPI adopt**: zero-downtime migration from existing OVH-managed
+  Kubernetes clusters — see [docs/operations.md](docs/operations.md)
+- **Addons**: Calico, Cilium, OpenStack CCM, Cinder CSI, cluster
+  autoscaler (`templates/addons/`)
 - **Webhook validation**: optional admission webhooks (cert-manager TLS)
 - **Idempotent reconciliation**: safe restart, no duplicate resources
-- **Orphan cleanup**: detects and removes leftover load balancers
+- **Orphan cleanup**: detects and removes leftover load balancers and FIPs
 - **Production-ready**: Prometheus metrics, conditions, finalizers,
   CAPI v1beta1 contract compliance
+- **Live E2E CI**: weekly + on-demand workflow against a real OVH
+  project — see [docs/TESTING.md](docs/TESTING.md)
 
 ## Quick start
 
@@ -43,22 +53,27 @@ For the full walkthrough (~15 min from zero to Ready nodes), see
 ```bash
 helm install capiovh \
   oci://ghcr.io/rancher-sandbox/charts/cluster-api-provider-ovhcloud \
-  --version 0.2.0 \
   --namespace capiovh-system --create-namespace \
   --set webhooks.enabled=true \
   --set webhooks.certManager.enabled=true
 ```
 
+(Pin `--version` to a specific tag for reproducible installs — see the
+[releases page](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases).)
+
 ### Install (manifest)
 
 ```bash
-kubectl apply -f https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/v0.2.0/infrastructure-components.yaml
+LATEST=$(curl -fsS https://api.github.com/repos/rancher-sandbox/cluster-api-provider-ovhcloud/releases/latest | jq -r .tag_name)
+kubectl apply -f "https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/${LATEST}/infrastructure-components.yaml"
 ```
 
 ### Provision a cluster
 
 ```bash
-# 1. Create OVH credentials secret
+# 1. Create OVH credentials secret. NB: the SSH key must be registered
+# via the OVH native API (POST /cloud/project/{sn}/sshkey), not via
+# `openstack keypair create` — see docs/ovh-credentials-guide.md.
 kubectl create namespace demo
 kubectl -n demo create secret generic ovh-credentials \
   --from-literal=endpoint=ovh-eu \
@@ -66,15 +81,20 @@ kubectl -n demo create secret generic ovh-credentials \
   --from-literal=applicationSecret=<AS> \
   --from-literal=consumerKey=<CK>
 
-# 2. Generate and apply a Cluster
+# 2. Generate and apply a Cluster from the latest release templates
 export OVH_SERVICE_NAME=<project-id>
 export OVH_REGION=EU-WEST-PAR
 export OVH_SSH_KEY=my-key
+LATEST=$(curl -fsS https://api.github.com/repos/rancher-sandbox/cluster-api-provider-ovhcloud/releases/latest | jq -r .tag_name)
 clusterctl generate cluster mycluster \
-  --from https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/v0.2.0/cluster-template-kubeadm.yaml \
+  --from "https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases/download/${LATEST}/cluster-template-kubeadm.yaml" \
   --kubernetes-version v1.31.0 \
   --target-namespace demo | kubectl apply -f -
 ```
+
+A topology-based variant using `ClusterClass ovhcloud-rke2` lives at
+[`templates/clusterclass/rke2/`](templates/clusterclass/rke2/) — see
+[docs/quickstart.md](docs/quickstart.md) for the full walkthrough.
 
 ## Architecture
 
@@ -105,6 +125,7 @@ A high-level diagram and reconciliation flow is in
 | `OVHMachine` | Machine-level: instance flavor, image, SSH key, optional volumes |
 | `OVHMachineTemplate` | Template referenced by ControlPlane / MachineDeployment |
 | `OVHClusterTemplate` | Template referenced by ClusterClass |
+| `OVHMachinePool` | (CRD only — reconciler not implemented yet) |
 
 ## Documentation
 
