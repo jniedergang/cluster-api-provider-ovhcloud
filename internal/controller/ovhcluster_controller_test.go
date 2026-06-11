@@ -23,6 +23,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
+
 	infrav1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha2"
 )
 
@@ -35,8 +37,9 @@ func TestOVHClusterCRD_EnvTest(t *testing.T) {
 			Namespace: "default",
 		},
 		Spec: infrav1.OVHClusterSpec{
-			ServiceName: "test-project-id",
-			Region:      "GRA7",
+			ControlPlaneEndpoint: clusterv1.APIEndpoint{Host: "0.0.0.0", Port: 6443},
+			ServiceName:          "test-project-id",
+			Region:               "GRA7",
 			IdentitySecret: infrav1.SecretKey{
 				Namespace: "default",
 				Name:      "ovh-creds",
@@ -114,9 +117,11 @@ func TestOVHClusterTemplate_EnvTest(t *testing.T) {
 		},
 		Spec: infrav1.OVHClusterTemplateSpec{
 			Template: infrav1.OVHClusterTemplateResource{
+				ObjectMeta: clusterv1.ObjectMeta{Labels: map[string]string{"test": "envtest"}},
 				Spec: infrav1.OVHClusterSpec{
-					ServiceName: "template-project",
-					Region:      "SBG5",
+					ControlPlaneEndpoint: clusterv1.APIEndpoint{Host: "0.0.0.0", Port: 6443},
+					ServiceName:          "template-project",
+					Region:               "SBG5",
 					IdentitySecret: infrav1.SecretKey{
 						Namespace: "default",
 						Name:      "ovh-creds-template",
@@ -157,6 +162,7 @@ func TestOVHMachineTemplate_EnvTest(t *testing.T) {
 		},
 		Spec: infrav1.OVHMachineTemplateSpec{
 			Template: infrav1.OVHMachineTemplateResource{
+				ObjectMeta: clusterv1.ObjectMeta{Labels: map[string]string{"test": "envtest"}},
 				Spec: infrav1.OVHMachineSpec{
 					FlavorName:   "c2-15",
 					ImageName:    "Debian 12",

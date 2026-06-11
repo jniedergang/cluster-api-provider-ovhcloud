@@ -34,10 +34,12 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/patch"
@@ -154,9 +156,12 @@ func (r *OVHClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	ovhClient, err := locutil.GetOVHClientFromCluster(ctx, r.Client, ovhCluster, logger)
 	if err != nil {
 		logger.Error(err, "unable to create OVH client")
-		conditions.MarkFalse(ovhCluster, infrav1.OVHConnectionReadyCondition,
-			infrav1.OVHConnectionFailedReason, clusterv1.ConditionSeverityError,
-			"Failed to create OVH client: %s", err.Error())
+		conditions.Set(ovhCluster, metav1.Condition{
+			Type:    infrav1.OVHConnectionReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.OVHConnectionFailedReason,
+			Message: "Failed to create OVH client: " + err.Error(),
+		})
 
 		return ctrl.Result{RequeueAfter: requeueTimeShort}, nil
 	}
@@ -240,18 +245,18 @@ func (r *OVHClusterReconciler) secretToOVHCluster(ctx context.Context, obj clien
 
 // clusterToOVHCluster maps a Cluster event to the OVHCluster it references.
 func (r *OVHClusterReconciler) clusterToOVHCluster(ctx context.Context, obj *clusterv1.Cluster) []reconcile.Request {
-	if obj.Spec.InfrastructureRef == nil {
+	if !obj.Spec.InfrastructureRef.IsDefined() {
 		return nil
 	}
 
-	if obj.Spec.InfrastructureRef.GroupVersionKind().Kind != "OVHCluster" {
+	if obj.Spec.InfrastructureRef.Kind != "OVHCluster" {
 		return nil
 	}
 
 	return []reconcile.Request{
 		{
 			NamespacedName: types.NamespacedName{
-				Namespace: obj.Spec.InfrastructureRef.Namespace,
+				Namespace: obj.Namespace,
 				Name:      obj.Spec.InfrastructureRef.Name,
 			},
 		},
@@ -322,7 +327,11 @@ func (r *OVHClusterReconciler) ReconcileNormal(scope *ClusterScope) (reconcile.R
 
 	// All infrastructure ready
 	scope.OVHCluster.Status.Ready = true
-	conditions.MarkTrue(scope.OVHCluster, infrav1.InfrastructureReadyCondition)
+	conditions.Set(scope.OVHCluster, metav1.Condition{
+		Type:   infrav1.InfrastructureReadyCondition,
+		Status: metav1.ConditionTrue,
+		Reason: infrav1.InfrastructureReadyCondition,
+	})
 	logger.Info("OVH cluster infrastructure is ready",
 		"controlPlaneEndpoint", scope.OVHCluster.Spec.ControlPlaneEndpoint)
 
@@ -346,16 +355,16 @@ func (r *OVHClusterReconciler) reconcileFailureDomains(scope *ClusterScope) {
 		return
 	}
 
-	fds := clusterv1.FailureDomains{}
+	fds := []clusterv1.FailureDomain{}
 
 	if len(scope.OVHCluster.Spec.FailureDomains) > 0 {
 		for _, fd := range scope.OVHCluster.Spec.FailureDomains {
-			fds[fd] = clusterv1.FailureDomainSpec{ControlPlane: true}
+			fds = append(fds, clusterv1.FailureDomain{Name: fd, ControlPlane: ptr.To(true)})
 		}
 	} else {
 		for _, svc := range info.Services {
 			if svc.Name == "instance" && svc.Status == "UP" {
-				fds[scope.OVHCluster.Spec.Region] = clusterv1.FailureDomainSpec{ControlPlane: true}
+				fds = append(fds, clusterv1.FailureDomain{Name: scope.OVHCluster.Spec.Region, ControlPlane: ptr.To(true)})
 			}
 		}
 	}
@@ -485,15 +494,22 @@ func (r *OVHClusterReconciler) reconcileDNS(scope *ClusterScope) error {
 func (r *OVHClusterReconciler) reconcileCredentials(scope *ClusterScope) error {
 	err := scope.OVHClient.ValidateCredentials()
 	if err != nil {
-		conditions.MarkFalse(scope.OVHCluster, infrav1.OVHConnectionReadyCondition,
-			infrav1.OVHAuthenticationFailedReason, clusterv1.ConditionSeverityError,
-			"Failed to validate OVH credentials: %s", err.Error())
+		conditions.Set(scope.OVHCluster, metav1.Condition{
+			Type:    infrav1.OVHConnectionReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.OVHAuthenticationFailedReason,
+			Message: "Failed to validate OVH credentials: " + err.Error(),
+		})
 
 		return fmt.Errorf("validating OVH credentials: %w", err)
 	}
 
 	scope.Logger.V(1).Info("OVH credentials validated", "serviceName", scope.OVHCluster.Spec.ServiceName)
-	conditions.MarkTrue(scope.OVHCluster, infrav1.OVHConnectionReadyCondition)
+	conditions.Set(scope.OVHCluster, metav1.Condition{
+		Type:   infrav1.OVHConnectionReadyCondition,
+		Status: metav1.ConditionTrue,
+		Reason: infrav1.OVHConnectionReadyCondition,
+	})
 
 	return nil
 }
@@ -505,7 +521,11 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 	// If no network config, skip network reconciliation
 	if scope.OVHCluster.Spec.NetworkConfig == nil {
 		logger.V(1).Info("No network config specified, skipping network reconciliation")
-		conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkReadyCondition)
+		conditions.Set(scope.OVHCluster, metav1.Condition{
+			Type:   infrav1.NetworkReadyCondition,
+			Status: metav1.ConditionTrue,
+			Reason: infrav1.NetworkReadyCondition,
+		})
 
 		return nil
 	}
@@ -529,15 +549,22 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 				Regions: []string{region},
 			})
 			if err != nil {
-				conditions.MarkFalse(scope.OVHCluster, infrav1.NetworkReadyCondition,
-					infrav1.NetworkCreationFailedReason, clusterv1.ConditionSeverityError,
-					"Failed to create network: %s", err.Error())
+				conditions.Set(scope.OVHCluster, metav1.Condition{
+					Type:    infrav1.NetworkReadyCondition,
+					Status:  metav1.ConditionFalse,
+					Reason:  infrav1.NetworkCreationFailedReason,
+					Message: "Failed to create network: " + err.Error(),
+				})
 
 				return fmt.Errorf("creating private network: %w", err)
 			}
 
 			scope.OVHCluster.Status.NetworkID = network.ID
-			conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkCreatedByControllerCondition)
+			conditions.Set(scope.OVHCluster, metav1.Condition{
+				Type:   infrav1.NetworkCreatedByControllerCondition,
+				Status: metav1.ConditionTrue,
+				Reason: infrav1.NetworkCreatedByControllerCondition,
+			})
 			logger.Info("Private network created", "networkID", network.ID)
 		}
 	}
@@ -568,9 +595,12 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 	}
 
 	if regionStatus != "ACTIVE" {
-		conditions.MarkFalse(scope.OVHCluster, infrav1.NetworkReadyCondition,
-			infrav1.NetworkCreationFailedReason, clusterv1.ConditionSeverityInfo,
-			"Network %s status in %s is %q, waiting for ACTIVE", net.ID, region, regionStatus)
+		conditions.Set(scope.OVHCluster, metav1.Condition{
+			Type:    infrav1.NetworkReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.NetworkCreationFailedReason,
+			Message: fmt.Sprintf("Network %s status in %s is %q, waiting for ACTIVE", net.ID, region, regionStatus),
+		})
 		logger.Info("Network not yet ACTIVE in region, requeueing", "region", region, "status", regionStatus)
 
 		return errNetworkNotReady
@@ -608,7 +638,11 @@ func (r *OVHClusterReconciler) reconcileNetwork(scope *ClusterScope) error {
 		}
 	}
 
-	conditions.MarkTrue(scope.OVHCluster, infrav1.NetworkReadyCondition)
+	conditions.Set(scope.OVHCluster, metav1.Condition{
+		Type:   infrav1.NetworkReadyCondition,
+		Status: metav1.ConditionTrue,
+		Reason: infrav1.NetworkReadyCondition,
+	})
 
 	return nil
 }
@@ -704,9 +738,12 @@ func (r *OVHClusterReconciler) reconcileLoadBalancer(scope *ClusterScope) (recon
 
 	lbFlavor, err := scope.OVHClient.GetLBFlavorByName(lbFlavorName)
 	if err != nil {
-		conditions.MarkFalse(scope.OVHCluster, infrav1.LoadBalancerReadyCondition,
-			infrav1.LoadBalancerCreationFailedReason, clusterv1.ConditionSeverityError,
-			"LB flavor %q not found: %s", lbFlavorName, err.Error())
+		conditions.Set(scope.OVHCluster, metav1.Condition{
+			Type:    infrav1.LoadBalancerReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.LoadBalancerCreationFailedReason,
+			Message: fmt.Sprintf("LB flavor %q not found: %s", lbFlavorName, err.Error()),
+		})
 
 		return ctrl.Result{}, fmt.Errorf("resolving LB flavor %q: %w", lbFlavorName, err)
 	}
@@ -754,9 +791,12 @@ func (r *OVHClusterReconciler) reconcileLoadBalancer(scope *ClusterScope) (recon
 	lb, err := scope.OVHClient.CreateLoadBalancer(opts)
 	capiovhmetrics.LBPollDuration.Observe(time.Since(lbStart).Seconds())
 	if err != nil {
-		conditions.MarkFalse(scope.OVHCluster, infrav1.LoadBalancerReadyCondition,
-			infrav1.LoadBalancerCreationFailedReason, clusterv1.ConditionSeverityError,
-			"Failed to create load balancer: %s", err.Error())
+		conditions.Set(scope.OVHCluster, metav1.Condition{
+			Type:    infrav1.LoadBalancerReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.LoadBalancerCreationFailedReason,
+			Message: "Failed to create load balancer: " + err.Error(),
+		})
 
 		return ctrl.Result{}, fmt.Errorf("creating load balancer: %w", err)
 	}
@@ -773,9 +813,12 @@ func (r *OVHClusterReconciler) handleExistingLB(scope *ClusterScope, lb *ovhclie
 
 	if lb.ProvisioningStatus != ovhclient.LBProvisioningStatusActive {
 		logger.Info("Load balancer not yet ACTIVE", "status", lb.ProvisioningStatus)
-		conditions.MarkFalse(scope.OVHCluster, infrav1.LoadBalancerReadyCondition,
-			infrav1.LoadBalancerNotReadyReason, clusterv1.ConditionSeverityInfo,
-			"Load balancer provisioning: %s", lb.ProvisioningStatus)
+		conditions.Set(scope.OVHCluster, metav1.Condition{
+			Type:    infrav1.LoadBalancerReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.LoadBalancerNotReadyReason,
+			Message: "Load balancer provisioning: " + lb.ProvisioningStatus,
+		})
 
 		return ctrl.Result{RequeueAfter: requeueTimeShort}, nil
 	}
@@ -829,7 +872,11 @@ func (r *OVHClusterReconciler) handleExistingLB(scope *ClusterScope, lb *ovhclie
 		logger.Info("Control plane endpoint set", "host", endpointHost, "port", apiServerLBPort)
 	}
 
-	conditions.MarkTrue(scope.OVHCluster, infrav1.LoadBalancerReadyCondition)
+	conditions.Set(scope.OVHCluster, metav1.Condition{
+		Type:   infrav1.LoadBalancerReadyCondition,
+		Status: metav1.ConditionTrue,
+		Reason: infrav1.LoadBalancerReadyCondition,
+	})
 
 	return ctrl.Result{}, nil
 }
