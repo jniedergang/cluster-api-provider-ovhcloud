@@ -7,7 +7,7 @@ metadata:
   name: ovhclustertemplates.infrastructure.cluster.x-k8s.io
   labels:
     cluster.x-k8s.io/provider: infrastructure-ovhcloud
-    cluster.x-k8s.io/v1beta1: v1alpha2
+    cluster.x-k8s.io/v1beta2: v1alpha2
 spec:
   group: infrastructure.cluster.x-k8s.io
   names:
@@ -53,6 +53,7 @@ spec:
                 properties:
                   metadata:
                     description: Standard object's metadata.
+                    minProperties: 1
                     properties:
                       annotations:
                         additionalProperties:
@@ -79,20 +80,21 @@ spec:
                       controlPlaneEndpoint:
                         description: ControlPlaneEndpoint represents the endpoint
                           used to communicate with the control plane.
+                        minProperties: 1
                         properties:
                           host:
                             description: host is the hostname on which the API server
                               is serving.
                             maxLength: 512
+                            minLength: 1
                             type: string
                           port:
                             description: port is the port on which the API server
                               is serving.
                             format: int32
+                            maximum: 65535
+                            minimum: 1
                             type: integer
-                        required:
-                        - host
-                        - port
                         type: object
                       identitySecret:
                         description: |-
@@ -257,6 +259,7 @@ spec:
                 properties:
                   metadata:
                     description: Standard object's metadata.
+                    minProperties: 1
                     properties:
                       annotations:
                         additionalProperties:
@@ -283,20 +286,21 @@ spec:
                       controlPlaneEndpoint:
                         description: ControlPlaneEndpoint represents the endpoint
                           used to communicate with the control plane.
+                        minProperties: 1
                         properties:
                           host:
                             description: host is the hostname on which the API server
                               is serving.
                             maxLength: 512
+                            minLength: 1
                             type: string
                           port:
                             description: port is the port on which the API server
                               is serving.
                             format: int32
+                            maximum: 65535
+                            minimum: 1
                             type: integer
-                        required:
-                        - host
-                        - port
                         type: object
                       defaultTags:
                         additionalProperties:
@@ -351,6 +355,15 @@ spec:
                         description: LoadBalancerConfig describes how the OVH managed
                           load balancer should be configured.
                         properties:
+                          existingFloatingIPID:
+                            description: ExistingFloatingIPID references a pre-existing
+                              floating IP to adopt.
+                            type: string
+                          existingLoadBalancerID:
+                            description: |-
+                              ExistingLoadBalancerID references a pre-existing Octavia load balancer
+                              to adopt instead of creating a new one. Used for cluster adoption.
+                            type: string
                           flavorName:
                             default: small
                             description: |-
