@@ -57,7 +57,7 @@ jobs:
         env:
           CLUSTER_TOPOLOGY: "true"
         run: |
-          curl -sL https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.10.3/clusterctl-linux-amd64 -o /usr/local/bin/clusterctl
+          curl -sL https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.12.9/clusterctl-linux-amd64 -o /usr/local/bin/clusterctl
           chmod +x /usr/local/bin/clusterctl
           clusterctl init \
             --bootstrap rke2 \
