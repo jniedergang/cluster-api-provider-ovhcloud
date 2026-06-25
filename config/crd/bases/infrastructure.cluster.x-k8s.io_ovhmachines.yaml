@@ -438,7 +438,11 @@ spec:
                 description: Initialization tracks internal provisioning state.
                 properties:
                   provisioned:
-                    description: Provisioned shows if the instance has been provisioned.
+                    description: |-
+                      Provisioned shows if the instance has been provisioned.
+                      Following the CAPI v1beta2 contract, this is a pointer so that an unset
+                      value (nil) is distinguishable from an explicit false. It must not be
+                      mutated once set to true.
                     type: boolean
                 type: object
               instanceID:

@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 
@@ -114,7 +115,7 @@ func TestHandleExistingInstance_Active(t *testing.T) {
 		t.Errorf("expected second address to be ExternalIP, got %s", ovhMachine.Status.Addresses[1].Type)
 	}
 
-	if !ovhMachine.Status.Initialization.Provisioned {
+	if !ptr.Deref(ovhMachine.Status.Initialization.Provisioned, false) {
 		t.Error("expected initialization.provisioned to be true")
 	}
 }

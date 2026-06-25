@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 
 	infrav1alpha2 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha2"
 )
@@ -283,7 +284,9 @@ func convertMachineStatusTo(src *OVHMachineStatus, dst *infrav1alpha2.OVHMachine
 	dst.FailureReason = src.FailureReason
 	dst.FailureMessage = src.FailureMessage
 	dst.Addresses = src.Addresses
-	dst.Initialization = infrav1alpha2.Initialization{Provisioned: src.Initialization.Provisioned}
+	// v1alpha1 Provisioned is a plain bool; v1alpha2 follows the v1beta2
+	// contract and uses *bool.
+	dst.Initialization = infrav1alpha2.Initialization{Provisioned: ptr.To(src.Initialization.Provisioned)}
 	dst.InstanceID = src.InstanceID
 	dst.VolumeIDs = src.VolumeIDs
 	dst.LBPoolMemberID = src.LBPoolMemberID
@@ -296,7 +299,7 @@ func convertMachineStatusFrom(src *infrav1alpha2.OVHMachineStatus, dst *OVHMachi
 	dst.FailureReason = src.FailureReason
 	dst.FailureMessage = src.FailureMessage
 	dst.Addresses = src.Addresses
-	dst.Initialization = Initialization{Provisioned: src.Initialization.Provisioned}
+	dst.Initialization = Initialization{Provisioned: ptr.Deref(src.Initialization.Provisioned, false)}
 	dst.InstanceID = src.InstanceID
 	dst.VolumeIDs = src.VolumeIDs
 	dst.LBPoolMemberID = src.LBPoolMemberID

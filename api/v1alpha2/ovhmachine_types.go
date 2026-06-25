@@ -68,7 +68,11 @@ type OVHVolume struct {
 // Initialization tracks internal instance provisioning state.
 type Initialization struct {
 	// Provisioned shows if the instance has been provisioned.
-	Provisioned bool `json:"provisioned,omitempty"`
+	// Following the CAPI v1beta2 contract, this is a pointer so that an unset
+	// value (nil) is distinguishable from an explicit false. It must not be
+	// mutated once set to true.
+	// +optional
+	Provisioned *bool `json:"provisioned,omitempty"`
 }
 
 // OVHMachineSpec defines the desired state of OVHMachine.

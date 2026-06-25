@@ -701,6 +701,21 @@ spec:
                   once "exposed", provides SNAT outbound internet access for all instances
                   on the subnet.
                 type: string
+              initialization:
+                description: |-
+                  Initialization tracks provisioning state per the CAPI v1beta2 contract.
+                  status.initialization.provisioned is read by the core Cluster controller
+                  to set Cluster.status.initialization.infrastructureProvisioned; it
+                  replaces the deprecated status.ready as the contract signal.
+                properties:
+                  provisioned:
+                    description: |-
+                      Provisioned shows if the instance has been provisioned.
+                      Following the CAPI v1beta2 contract, this is a pointer so that an unset
+                      value (nil) is distinguishable from an explicit false. It must not be
+                      mutated once set to true.
+                    type: boolean
+                type: object
               listenerID:
                 description: ListenerID is the ID of the API server listener on the
                   load balancer.

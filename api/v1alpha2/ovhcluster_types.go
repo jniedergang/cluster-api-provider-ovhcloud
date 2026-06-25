@@ -268,6 +268,13 @@ type OVHClusterStatus struct {
 	// +optional
 	Ready bool `json:"ready,omitempty"`
 
+	// Initialization tracks provisioning state per the CAPI v1beta2 contract.
+	// status.initialization.provisioned is read by the core Cluster controller
+	// to set Cluster.status.initialization.infrastructureProvisioned; it
+	// replaces the deprecated status.ready as the contract signal.
+	// +optional
+	Initialization Initialization `json:"initialization,omitempty"`
+
 	// FailureReason is the short name for the reason why a failure might be happening.
 	// +optional
 	FailureReason string `json:"failureReason,omitempty"`

@@ -325,8 +325,11 @@ func (r *OVHClusterReconciler) ReconcileNormal(scope *ClusterScope) (reconcile.R
 		logger.Info("Warning: failed to reconcile DNS", "error", err)
 	}
 
-	// All infrastructure ready
+	// All infrastructure ready. Dual-write the v1beta2 contract field
+	// (status.initialization.provisioned) alongside the deprecated status.ready
+	// so the flip to the v1beta2 contract label is non-breaking.
 	scope.OVHCluster.Status.Ready = true
+	scope.OVHCluster.Status.Initialization.Provisioned = ptr.To(true)
 	conditions.Set(scope.OVHCluster, metav1.Condition{
 		Type:   infrav1.InfrastructureReadyCondition,
 		Status: metav1.ConditionTrue,

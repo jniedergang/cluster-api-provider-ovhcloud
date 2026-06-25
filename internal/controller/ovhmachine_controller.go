@@ -62,11 +62,11 @@ const (
 
 var (
 	machineInitializationProvisioned = infrav1.Initialization{
-		Provisioned: true,
+		Provisioned: ptr.To(true),
 	}
 
 	machineInitializationNotProvisioned = infrav1.Initialization{
-		Provisioned: false,
+		Provisioned: ptr.To(false),
 	}
 )
 
