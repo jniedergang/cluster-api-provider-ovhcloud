@@ -676,14 +676,6 @@ spec:
                   - name
                   type: object
                 type: array
-              failureMessage:
-                description: FailureMessage is a full error message dump of the above
-                  failureReason.
-                type: string
-              failureReason:
-                description: FailureReason is the short name for the reason why a
-                  failure might be happening.
-                type: string
               floatingIPID:
                 description: FloatingIPID is the floating IP assigned to the load
                   balancer.

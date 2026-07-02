@@ -81,8 +81,6 @@ func (src *OVHCluster) ConvertTo(dstRaw conversion.Hub) error {
 
 	// Status — copy common fields (v1alpha2 has extra fields that v1alpha1 doesn't).
 	dst.Status.Ready = src.Status.Ready
-	dst.Status.FailureReason = src.Status.FailureReason
-	dst.Status.FailureMessage = src.Status.FailureMessage
 	dst.Status.Conditions = src.Status.Conditions
 	dst.Status.NetworkID = src.Status.NetworkID
 	dst.Status.SubnetID = src.Status.SubnetID
@@ -146,8 +144,6 @@ func (dst *OVHCluster) ConvertFrom(srcRaw conversion.Hub) error {
 
 	// Status — copy common fields
 	dst.Status.Ready = src.Status.Ready
-	dst.Status.FailureReason = src.Status.FailureReason
-	dst.Status.FailureMessage = src.Status.FailureMessage
 	dst.Status.Conditions = src.Status.Conditions
 	dst.Status.NetworkID = src.Status.NetworkID
 	dst.Status.SubnetID = src.Status.SubnetID
@@ -281,8 +277,6 @@ func convertMachineSpecFrom(src *infrav1alpha2.OVHMachineSpec, dst *OVHMachineSp
 func convertMachineStatusTo(src *OVHMachineStatus, dst *infrav1alpha2.OVHMachineStatus) {
 	dst.Ready = src.Ready
 	dst.Conditions = src.Conditions
-	dst.FailureReason = src.FailureReason
-	dst.FailureMessage = src.FailureMessage
 	dst.Addresses = src.Addresses
 	// v1alpha1 Provisioned is a plain bool; v1alpha2 follows the v1beta2
 	// contract and uses *bool.
@@ -296,8 +290,6 @@ func convertMachineStatusTo(src *OVHMachineStatus, dst *infrav1alpha2.OVHMachine
 func convertMachineStatusFrom(src *infrav1alpha2.OVHMachineStatus, dst *OVHMachineStatus) {
 	dst.Ready = src.Ready
 	dst.Conditions = src.Conditions
-	dst.FailureReason = src.FailureReason
-	dst.FailureMessage = src.FailureMessage
 	dst.Addresses = src.Addresses
 	dst.Initialization = Initialization{Provisioned: ptr.Deref(src.Initialization.Provisioned, false)}
 	dst.InstanceID = src.InstanceID

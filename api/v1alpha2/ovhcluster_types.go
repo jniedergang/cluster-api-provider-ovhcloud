@@ -275,14 +275,6 @@ type OVHClusterStatus struct {
 	// +optional
 	Initialization Initialization `json:"initialization,omitempty"`
 
-	// FailureReason is the short name for the reason why a failure might be happening.
-	// +optional
-	FailureReason string `json:"failureReason,omitempty"`
-
-	// FailureMessage is a full error message dump of the above failureReason.
-	// +optional
-	FailureMessage string `json:"failureMessage,omitempty"`
-
 	// Conditions defines current service state of the OVH cluster.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

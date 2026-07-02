@@ -457,12 +457,10 @@ func (r *OVHMachineReconciler) handleExistingInstance(scope *MachineScope, insta
 			Type:    infrav1.InstanceProvisioningReadyCondition,
 			Status:  metav1.ConditionFalse,
 			Reason:  infrav1.InstanceProvisioningFailedReason,
-			Message: "Instance provisioning failed (ERROR state)",
+			Message: fmt.Sprintf("Instance provisioning failed: OVH instance %s is in ERROR state", instance.ID),
 		})
 
 		scope.OVHMachine.Status.Ready = false
-		scope.OVHMachine.Status.FailureReason = "InstanceError"
-		scope.OVHMachine.Status.FailureMessage = fmt.Sprintf("OVH instance %s is in ERROR state", instance.ID)
 
 		capiovhmetrics.MachineCreateErrorsTotal.Inc()
 

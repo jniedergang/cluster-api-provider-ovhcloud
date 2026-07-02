@@ -22,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
@@ -197,8 +198,9 @@ func TestHandleExistingInstance_Error(t *testing.T) {
 		t.Error("expected machine to NOT be ready on ERROR")
 	}
 
-	if ovhMachine.Status.FailureReason != "InstanceError" {
-		t.Errorf("expected FailureReason InstanceError, got %s", ovhMachine.Status.FailureReason)
+	cond := apimeta.FindStatusCondition(ovhMachine.Status.Conditions, infrav1.InstanceProvisioningReadyCondition)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != infrav1.InstanceProvisioningFailedReason {
+		t.Errorf("expected InstanceProvisioningReady=False/%s, got %+v", infrav1.InstanceProvisioningFailedReason, cond)
 	}
 }
 

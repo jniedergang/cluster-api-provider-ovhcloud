@@ -135,14 +135,6 @@ type OVHMachineStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// FailureReason is the short name for the reason why a failure might be happening.
-	// +optional
-	FailureReason string `json:"failureReason,omitempty"`
-
-	// FailureMessage is a full error message dump of the above failureReason.
-	// +optional
-	FailureMessage string `json:"failureMessage,omitempty"`
-
 	// Addresses contains the OVH instance associated addresses.
 	Addresses []clusterv1.MachineAddress `json:"addresses,omitempty"`
 
