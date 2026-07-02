@@ -41,6 +41,40 @@ ovh() {
 
 log() { echo "[pre-cleanup] $*"; }
 
+# --- 0. Preflight: fail fast with a clear message if OVH auth is broken. ---
+# A dead credential ("This credential is not valid") or one created without
+# /cloud/* rights ("This call has not been granted") otherwise surfaces
+# downstream as an opaque JSON decode error on an empty API response.
+preflight_auth() {
+  local path="/cloud/project/$OVH_SERVICE_NAME" ts sig code body
+  ts=$(curl -fsS "https://${EP_HOST}.api.ovh.com/1.0/auth/time") || {
+    echo "[pre-cleanup] FATAL: cannot reach the OVH API host ${EP_HOST}.api.ovh.com" >&2
+    exit 1
+  }
+  sig="\$1\$$(printf '%s' "${OVH_APP_SECRET}+${OVH_CONSUMER_KEY}+GET+https://${EP_HOST}.api.ovh.com/1.0${path}++${ts}" | sha1sum | cut -d' ' -f1)"
+  body=$(mktemp)
+  code=$(curl -s -o "$body" -w '%{http_code}' "https://${EP_HOST}.api.ovh.com/1.0${path}" \
+    -H "X-Ovh-Application: $OVH_APP_KEY" \
+    -H "X-Ovh-Consumer: $OVH_CONSUMER_KEY" \
+    -H "X-Ovh-Timestamp: $ts" \
+    -H "X-Ovh-Signature: $sig" \
+    -H "Content-Type: application/json")
+  if [ "$code" = "200" ]; then
+    log "preflight: OVH auth OK (HTTP 200 on ${path})"
+    rm -f "$body"
+    return 0
+  fi
+  echo "[pre-cleanup] FATAL: OVH API auth failed (HTTP ${code}) on ${path}" >&2
+  echo "[pre-cleanup]   response: $(cat "$body")" >&2
+  echo "[pre-cleanup]   The OVH credential is expired or lacks /cloud/* rights." >&2
+  echo "[pre-cleanup]   Renew at https://auth.${EP_HOST}.ovhcloud.com/api/createToken" >&2
+  echo "[pre-cleanup]   (rights GET/POST/PUT/DELETE on /*, validity unlimited), then refresh" >&2
+  echo "[pre-cleanup]   OVH_APP_KEY / OVH_APP_SECRET / OVH_CONSUMER_KEY in the 'ovh' GitHub env." >&2
+  rm -f "$body"
+  exit 1
+}
+preflight_auth
+
 # --- 1. Delete all instances ---
 log "Step 1: instances"
 for id in $(ovh GET "/cloud/project/$OVH_SERVICE_NAME/instance" | python3 -c 'import json,sys; [print(i["id"]) for i in json.load(sys.stdin) if i.get("region")==r]' r="$OVH_REGION" 2>/dev/null || true); do
@@ -59,7 +93,7 @@ import json, sys
 for l in json.load(sys.stdin):
   status = l.get("provisioningStatus", "")
   print(l["id"], status)
-' > /tmp/_lbs.txt
+' > /tmp/_lbs.txt 2>/dev/null || : > /tmp/_lbs.txt
 while read -r id status; do
   if [ -z "$id" ]; then continue; fi
   case "$status" in

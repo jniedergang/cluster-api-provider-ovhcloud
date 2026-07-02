@@ -46,7 +46,7 @@ for inst in json.load(sys.stdin):
               if a.get("type") == "public" and a.get("version") == 4), "")
   if pub and inst.get("status") == "ACTIVE":
     print(inst["id"], inst["name"], pub)
-' > "$OUT/instances.txt"
+' > "$OUT/instances.txt" 2>/dev/null
 cat "$OUT/instances.txt"
 
 if [ ! -s "$OUT/instances.txt" ]; then
