@@ -8,6 +8,14 @@ on:
         required: false
         default: "EU-WEST-PAR"
         type: string
+      mode:
+        description: "full = RKE2 cluster (CP+worker); bare = OVHCluster only, validates the v1beta2 contract in isolation (no RKE2)"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full
+          - bare
   schedule:
     - cron: "0 3 * * 1"  # weekly Monday 3 AM UTC
 
@@ -20,6 +28,8 @@ env:
   IMAGE_NAME: cluster-api-provider-ovhcloud
   ORG: ${{ github.repository_owner }}
   OVH_REGION: ${{ inputs.region || 'EU-WEST-PAR' }}
+  # Schedule has no inputs, so default to the full RKE2 path there.
+  MODE: ${{ inputs.mode || 'full' }}
 
 permissions:
   contents: read
@@ -53,15 +63,20 @@ jobs:
         with:
           cluster_name: capiovh-e2e
 
-      - name: Install CAPI + RKE2 providers
+      - name: Install CAPI providers
         env:
           CLUSTER_TOPOLOGY: "true"
         run: |
           curl -sL https://github.com/kubernetes-sigs/cluster-api/releases/download/v1.12.9/clusterctl-linux-amd64 -o /usr/local/bin/clusterctl
           chmod +x /usr/local/bin/clusterctl
-          clusterctl init \
-            --bootstrap rke2 \
-            --control-plane rke2
+          if [ "$MODE" = "bare" ]; then
+            # Bare OVHCluster test needs core only (no bootstrap/control-plane).
+            clusterctl init --core cluster-api:v1.12.9
+          else
+            clusterctl init \
+              --bootstrap rke2 \
+              --control-plane rke2
+          fi
 
       - name: Build and load CAPIOVH image
         run: |
@@ -88,6 +103,7 @@ jobs:
           kubectl wait --for=condition=available --timeout=180s deployment/capiovh-controller-manager -n capiovh-system
 
       - name: Create OVH credentials secret
+        if: env.MODE == 'full'
         env:
           OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
           OVH_APP_KEY: ${{ secrets.OVH_APP_KEY }}
@@ -112,6 +128,7 @@ jobs:
             --from-file=consumerKey="$tmpdir/consumerKey"
 
       - name: Apply ClusterClass
+        if: env.MODE == 'full'
         run: |
           kubectl apply -n fleet-default \
             -f templates/clusterclass/rke2/clusterclass-ovhcloud-rke2.yaml
@@ -132,7 +149,8 @@ jobs:
           pip install --quiet python-openstackclient
           ./test/e2e/pre-cleanup.sh
 
-      - name: Run E2E lifecycle test
+      - name: Run full cluster test
+        if: env.MODE == 'full'
         env:
           OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
           OVH_APP_KEY: ${{ secrets.OVH_APP_KEY }}
@@ -146,8 +164,24 @@ jobs:
           ./test/e2e/run-full-cluster-test.sh "e2e-ci-$(date +%s | tail -c 6)"
         timeout-minutes: 50
 
+      - name: Run bare OVHCluster test
+        if: env.MODE == 'bare'
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+          OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
+          OVH_APP_KEY: ${{ secrets.OVH_APP_KEY }}
+          OVH_APP_SECRET: ${{ secrets.OVH_APP_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+          OVH_SERVICE_NAME: ${{ secrets.OVH_SERVICE_NAME }}
+        run: |
+          # Cluster + OVHCluster only (no RKE2). Asserts the v1beta2 contract:
+          # OVHCluster.status.initialization.provisioned is read by the core
+          # Cluster controller into Cluster.status.initialization.infrastructureProvisioned.
+          ./test/e2e/run-e2e.sh lifecycle
+        timeout-minutes: 20
+
       - name: SSH-collect cloud-init / RKE2 logs from instances on failure
-        if: failure()
+        if: failure() && env.MODE == 'full'
         env:
           OVH_ENDPOINT: ${{ secrets.OVH_ENDPOINT }}
           OVH_APP_KEY: ${{ secrets.OVH_APP_KEY }}
