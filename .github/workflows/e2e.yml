@@ -74,8 +74,8 @@ jobs:
             clusterctl init --core cluster-api:v1.12.9
           else
             clusterctl init \
-              --bootstrap rke2 \
-              --control-plane rke2
+              --bootstrap rke2:v0.25.2 \
+              --control-plane rke2:v0.25.2
           fi
 
       - name: Build and load CAPIOVH image
@@ -196,6 +196,31 @@ jobs:
             cp /tmp/instance-logs/*.log /tmp/ 2>/dev/null || true
             cp /tmp/instance-logs/instances.txt /tmp/instances.log 2>/dev/null || true
           fi
+
+      - name: Collect instance console logs (works for private nodes)
+        if: failure() && env.MODE == 'full'
+        env:
+          OVH_OS_USERNAME: ${{ secrets.OVH_OS_USERNAME }}
+          OVH_OS_PASSWORD: ${{ secrets.OVH_OS_PASSWORD }}
+          OVH_SERVICE_NAME: ${{ secrets.OVH_SERVICE_NAME }}
+        run: |
+          # CP/worker instances sit on a private network (public access is via
+          # the LB floating IP), so SSH by public IP cannot reach them. The Nova
+          # console log is retrievable through the OpenStack management API with
+          # no node network access, so it captures cloud-init / RKE2 install
+          # output even when the node never came up.
+          pip install --quiet python-openstackclient
+          export OS_AUTH_URL=https://auth.cloud.ovh.net/v3
+          export OS_USERNAME="$OVH_OS_USERNAME" OS_PASSWORD="$OVH_OS_PASSWORD"
+          export OS_PROJECT_ID="$OVH_SERVICE_NAME" OS_REGION_NAME="$OVH_REGION"
+          export OS_IDENTITY_API_VERSION=3 OS_PROJECT_DOMAIN_NAME=Default OS_USER_DOMAIN_NAME=Default OS_INTERFACE=public
+          for id in $(openstack server list -f value -c ID 2>/dev/null); do
+            name=$(openstack server show "$id" -f value -c name 2>/dev/null || echo "$id")
+            echo "[console] $name ($id)"
+            openstack console log show "$id" > "/tmp/console-${name}.log" 2>&1 \
+              || echo "  console log unavailable for $name"
+          done
+          ls -la /tmp/console-*.log 2>/dev/null || echo "[console] no console logs captured"
 
       - name: Collect logs on failure
         if: failure()
