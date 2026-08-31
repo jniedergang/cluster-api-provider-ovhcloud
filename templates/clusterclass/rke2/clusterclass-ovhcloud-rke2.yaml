@@ -408,7 +408,9 @@ metadata:
 spec:
   template:
     spec:
-      version: ""  # set by Cluster.spec.topology.version
+      # version is NOT set here: the topology injects it from
+      # Cluster.spec.topology.version (the v1beta2 RKE2ControlPlaneTemplate
+      # resource spec has no version field).
       serverConfig:
         cni: calico
       rolloutStrategy:
