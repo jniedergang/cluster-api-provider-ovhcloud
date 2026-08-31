@@ -22,9 +22,11 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 
 	infrav1 "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/api/v1alpha2"
 	ovhclient "github.com/rancher-sandbox/cluster-api-provider-ovhcloud/pkg/ovh"
@@ -114,7 +116,7 @@ func TestHandleExistingInstance_Active(t *testing.T) {
 		t.Errorf("expected second address to be ExternalIP, got %s", ovhMachine.Status.Addresses[1].Type)
 	}
 
-	if !ovhMachine.Status.Initialization.Provisioned {
+	if !ptr.Deref(ovhMachine.Status.Initialization.Provisioned, false) {
 		t.Error("expected initialization.provisioned to be true")
 	}
 }
@@ -196,8 +198,9 @@ func TestHandleExistingInstance_Error(t *testing.T) {
 		t.Error("expected machine to NOT be ready on ERROR")
 	}
 
-	if ovhMachine.Status.FailureReason != "InstanceError" {
-		t.Errorf("expected FailureReason InstanceError, got %s", ovhMachine.Status.FailureReason)
+	cond := apimeta.FindStatusCondition(ovhMachine.Status.Conditions, infrav1.InstanceProvisioningReadyCondition)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != infrav1.InstanceProvisioningFailedReason {
+		t.Errorf("expected InstanceProvisioningReady=False/%s, got %+v", infrav1.InstanceProvisioningFailedReason, cond)
 	}
 }
 

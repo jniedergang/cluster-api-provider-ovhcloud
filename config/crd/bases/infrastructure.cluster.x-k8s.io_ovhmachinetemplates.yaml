@@ -45,6 +45,7 @@ spec:
                 properties:
                   metadata:
                     description: Standard object's metadata.
+                    minProperties: 1
                     properties:
                       annotations:
                         additionalProperties:
@@ -158,6 +159,7 @@ spec:
                 properties:
                   metadata:
                     description: Standard object's metadata.
+                    minProperties: 1
                     properties:
                       annotations:
                         additionalProperties:

@@ -25,16 +25,16 @@ instances, and clean everything up on deletion.
 - **MachineHealthCheck**: auto-created from ClusterClass for CP + workers
 - **Failure domains**: auto-discovered per region via OVH API
 - **CAPI adopt**: zero-downtime migration from existing OVH-managed
-  Kubernetes clusters — see [docs/operations.md](docs/operations.md)
+  Kubernetes clusters (see [docs/operations.md](docs/operations.md))
 - **Addons**: Calico, Cilium, OpenStack CCM, Cinder CSI, cluster
   autoscaler (`templates/addons/`)
 - **Webhook validation**: optional admission webhooks (cert-manager TLS)
 - **Idempotent reconciliation**: safe restart, no duplicate resources
 - **Orphan cleanup**: detects and removes leftover load balancers and FIPs
 - **Production-ready**: Prometheus metrics, conditions, finalizers,
-  CAPI v1beta1 contract compliance
+  CAPI v1beta2 contract compliance
 - **Live E2E CI**: weekly + on-demand workflow against a real OVH
-  project — see [docs/TESTING.md](docs/TESTING.md)
+  project (see [docs/TESTING.md](docs/TESTING.md))
 
 ## Quick start
 
@@ -43,10 +43,10 @@ For the full walkthrough (~15 min from zero to Ready nodes), see
 
 ### Prerequisites
 
-- A Kubernetes management cluster with [Cluster API core](https://cluster-api.sigs.k8s.io/user/quick-start.html#install-clusterctl) installed
+- A Kubernetes management cluster with [Cluster API core](https://cluster-api.sigs.k8s.io/user/quick-start.html#install-clusterctl) v1.11 or newer installed (the provider targets the CAPI v1beta2 contract)
 - [cert-manager](https://cert-manager.io/) (only if installing with webhooks)
-- An OVH Public Cloud project with API credentials — see the
-  [credentials guide](docs/ovh-credentials-guide.md)
+- An OVH Public Cloud project with API credentials (see the
+  [credentials guide](docs/ovh-credentials-guide.md))
 
 ### Install (Helm)
 
@@ -58,7 +58,7 @@ helm install capiovh \
   --set webhooks.certManager.enabled=true
 ```
 
-(Pin `--version` to a specific tag for reproducible installs — see the
+(Pin `--version` to a specific tag for reproducible installs, see the
 [releases page](https://github.com/rancher-sandbox/cluster-api-provider-ovhcloud/releases).)
 
 ### Install (manifest)
@@ -73,7 +73,7 @@ kubectl apply -f "https://github.com/rancher-sandbox/cluster-api-provider-ovhclo
 ```bash
 # 1. Create OVH credentials secret. NB: the SSH key must be registered
 # via the OVH native API (POST /cloud/project/{sn}/sshkey), not via
-# `openstack keypair create` — see docs/ovh-credentials-guide.md.
+# `openstack keypair create` (see docs/ovh-credentials-guide.md).
 kubectl create namespace demo
 kubectl -n demo create secret generic ovh-credentials \
   --from-literal=endpoint=ovh-eu \
@@ -93,7 +93,7 @@ clusterctl generate cluster mycluster \
 ```
 
 A topology-based variant using `ClusterClass ovhcloud-rke2` lives at
-[`templates/clusterclass/rke2/`](templates/clusterclass/rke2/) — see
+[`templates/clusterclass/rke2/`](templates/clusterclass/rke2/), see
 [docs/quickstart.md](docs/quickstart.md) for the full walkthrough.
 
 ## Architecture
@@ -125,21 +125,21 @@ A high-level diagram and reconciliation flow is in
 | `OVHMachine` | Machine-level: instance flavor, image, SSH key, optional volumes |
 | `OVHMachineTemplate` | Template referenced by ControlPlane / MachineDeployment |
 | `OVHClusterTemplate` | Template referenced by ClusterClass |
-| `OVHMachinePool` | (CRD only — reconciler not implemented yet) |
+| `OVHMachinePool` | (CRD only, reconciler not implemented yet) |
 
 ## Documentation
 
-- [Quickstart](docs/quickstart.md) — full walkthrough from zero to a Ready RKE2 cluster
-- [Architecture](docs/ARCHITECTURE.md) — design overview, reconciliation flows, OVH API quirks
-- [OVH credentials guide](docs/ovh-credentials-guide.md) — how to obtain a properly scoped Consumer Key
-- [BYOI guide](docs/byoi-guide.md) — uploading custom images (openSUSE, SLES, ...) via Glance
-- [Operations](docs/operations.md) — install, monitor, upgrade, uninstall in production
-- [Fleet / CAAPF addons](docs/fleet-addons.md) — deliver CNI tuning and other Helm addons via Fleet
-- [Testing](docs/TESTING.md) — unit, envtest, and end-to-end tests
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — common issues and fixes
-- [Development](docs/DEVELOPMENT.md) — dev environment setup, build, test
-- [Release process](docs/RELEASE.md) — how releases are cut
-- [Cluster templates](templates/README.md) — variable reference for each template
+- [Quickstart](docs/quickstart.md) (full walkthrough from zero to a Ready RKE2 cluster)
+- [Architecture](docs/ARCHITECTURE.md) (design overview, reconciliation flows, OVH API quirks)
+- [OVH credentials guide](docs/ovh-credentials-guide.md) (how to obtain a properly scoped Consumer Key)
+- [BYOI guide](docs/byoi-guide.md) (uploading custom images like openSUSE or SLES via Glance)
+- [Operations](docs/operations.md) (install, monitor, upgrade, uninstall in production)
+- [Fleet / CAAPF addons](docs/fleet-addons.md) (deliver CNI tuning and other Helm addons via Fleet)
+- [Testing](docs/TESTING.md) (unit, envtest, and end-to-end tests)
+- [Troubleshooting](docs/TROUBLESHOOTING.md) (common issues and fixes)
+- [Development](docs/DEVELOPMENT.md) (dev environment setup, build, test)
+- [Release process](docs/RELEASE.md) (how releases are cut)
+- [Cluster templates](templates/README.md) (variable reference for each template)
 
 ## Contributing
 

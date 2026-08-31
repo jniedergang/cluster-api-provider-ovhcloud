@@ -65,6 +65,15 @@ help: ## Display this help.
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
+.PHONY: crds-sync
+crds-sync: manifests ## Sync Helm chart CRDs from config/crd/bases (skips ovhmachinepools: scaffolded, no controller yet), adding the provider + v1beta2 contract labels.
+	@for base in config/crd/bases/*.yaml; do \
+		case "$$base" in *ovhmachinepools*) continue;; esac; \
+		out=chart/cluster-api-provider-ovhcloud/crds/$$(basename $$base); \
+		awk '/^  name: [a-z].*\.infrastructure\.cluster\.x-k8s\.io$$/ && !seen { print; print "  labels:"; print "    cluster.x-k8s.io/provider: infrastructure-ovhcloud"; print "    cluster.x-k8s.io/v1beta2: v1alpha2"; seen=1; next } { print }' "$$base" > "$$out"; \
+		echo "  synced $$(basename $$out)"; \
+	done
+
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."

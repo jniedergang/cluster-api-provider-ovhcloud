@@ -33,12 +33,14 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/utils/ptr"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/conditions"
@@ -60,11 +62,11 @@ const (
 
 var (
 	machineInitializationProvisioned = infrav1.Initialization{
-		Provisioned: true,
+		Provisioned: ptr.To(true),
 	}
 
 	machineInitializationNotProvisioned = infrav1.Initialization{
-		Provisioned: false,
+		Provisioned: ptr.To(false),
 	}
 )
 
@@ -165,7 +167,7 @@ func (r *OVHMachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Get OVHCluster
 	ovhCluster := &infrav1.OVHCluster{}
 	ovhClusterKey := types.NamespacedName{
-		Namespace: ownerCluster.Spec.InfrastructureRef.Namespace,
+		Namespace: ownerCluster.Namespace,
 		Name:      ownerCluster.Spec.InfrastructureRef.Name,
 	}
 
@@ -268,11 +270,14 @@ func (r *OVHMachineReconciler) ReconcileNormal(scope *MachineScope) (reconcile.R
 	}
 
 	// Wait for cluster infrastructure to be ready
-	if !scope.Cluster.Status.InfrastructureReady {
+	if !ptr.Deref(scope.Cluster.Status.Initialization.InfrastructureProvisioned, false) {
 		logger.Info("Waiting for cluster infrastructure to be ready ...")
-		conditions.MarkFalse(scope.OVHMachine, infrav1.InstanceProvisioningReadyCondition,
-			infrav1.InfrastructureProvisioningInProgressReason, clusterv1.ConditionSeverityInfo,
-			"Waiting for cluster infrastructure")
+		conditions.Set(scope.OVHMachine, metav1.Condition{
+			Type:    infrav1.InstanceProvisioningReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.InfrastructureProvisioningInProgressReason,
+			Message: "Waiting for cluster infrastructure",
+		})
 
 		return ctrl.Result{RequeueAfter: requeueDelay}, nil
 	}
@@ -342,7 +347,11 @@ func (r *OVHMachineReconciler) handleExistingInstance(scope *MachineScope, insta
 	logger := log.FromContext(scope.Ctx)
 
 	scope.OVHMachine.Status.InstanceID = instance.ID
-	conditions.MarkTrue(scope.OVHMachine, infrav1.InstanceCreatedCondition)
+	conditions.Set(scope.OVHMachine, metav1.Condition{
+		Type:   infrav1.InstanceCreatedCondition,
+		Status: metav1.ConditionTrue,
+		Reason: infrav1.InstanceCreatedCondition,
+	})
 
 	switch instance.Status {
 	case ovhclient.InstanceStatusActive:
@@ -387,8 +396,16 @@ func (r *OVHMachineReconciler) handleExistingInstance(scope *MachineScope, insta
 		scope.OVHMachine.Status.Ready = true
 		scope.OVHMachine.Status.Initialization = machineInitializationProvisioned
 
-		conditions.MarkTrue(scope.OVHMachine, infrav1.InstanceProvisioningReadyCondition)
-		conditions.MarkTrue(scope.OVHMachine, infrav1.InstanceRunningCondition)
+		conditions.Set(scope.OVHMachine, metav1.Condition{
+			Type:   infrav1.InstanceProvisioningReadyCondition,
+			Status: metav1.ConditionTrue,
+			Reason: infrav1.InstanceProvisioningReadyCondition,
+		})
+		conditions.Set(scope.OVHMachine, metav1.Condition{
+			Type:   infrav1.InstanceRunningCondition,
+			Status: metav1.ConditionTrue,
+			Reason: infrav1.InstanceRunningCondition,
+		})
 
 		// Register CP machines as backend members of the API server LB pool.
 		// Worker nodes are not added to the api-server pool. Best-effort: if
@@ -416,12 +433,18 @@ func (r *OVHMachineReconciler) handleExistingInstance(scope *MachineScope, insta
 	case ovhclient.InstanceStatusBuild:
 		logger.Info("Instance is still building ...", "instanceID", instance.ID)
 
-		conditions.MarkFalse(scope.OVHMachine, infrav1.InstanceProvisioningReadyCondition,
-			infrav1.InstanceProvisioningInProgressReason, clusterv1.ConditionSeverityInfo,
-			"Instance is being provisioned (BUILD state)")
-		conditions.MarkFalse(scope.OVHMachine, infrav1.InstanceRunningCondition,
-			infrav1.InstanceNotRunningReason, clusterv1.ConditionSeverityInfo,
-			"Instance is not yet running")
+		conditions.Set(scope.OVHMachine, metav1.Condition{
+			Type:    infrav1.InstanceProvisioningReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.InstanceProvisioningInProgressReason,
+			Message: "Instance is being provisioned (BUILD state)",
+		})
+		conditions.Set(scope.OVHMachine, metav1.Condition{
+			Type:    infrav1.InstanceRunningCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.InstanceNotRunningReason,
+			Message: "Instance is not yet running",
+		})
 
 		scope.OVHMachine.Status.Ready = false
 
@@ -430,13 +453,14 @@ func (r *OVHMachineReconciler) handleExistingInstance(scope *MachineScope, insta
 	case ovhclient.InstanceStatusError:
 		logger.Error(nil, "Instance is in ERROR state", "instanceID", instance.ID)
 
-		conditions.MarkFalse(scope.OVHMachine, infrav1.InstanceProvisioningReadyCondition,
-			infrav1.InstanceProvisioningFailedReason, clusterv1.ConditionSeverityError,
-			"Instance provisioning failed (ERROR state)")
+		conditions.Set(scope.OVHMachine, metav1.Condition{
+			Type:    infrav1.InstanceProvisioningReadyCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.InstanceProvisioningFailedReason,
+			Message: fmt.Sprintf("Instance provisioning failed: OVH instance %s is in ERROR state", instance.ID),
+		})
 
 		scope.OVHMachine.Status.Ready = false
-		scope.OVHMachine.Status.FailureReason = "InstanceError"
-		scope.OVHMachine.Status.FailureMessage = fmt.Sprintf("OVH instance %s is in ERROR state", instance.ID)
 
 		capiovhmetrics.MachineCreateErrorsTotal.Inc()
 
@@ -530,9 +554,12 @@ func (r *OVHMachineReconciler) createInstance(scope *MachineScope) (reconcile.Re
 	if err != nil {
 		capiovhmetrics.MachineCreateErrorsTotal.Inc()
 
-		conditions.MarkFalse(scope.OVHMachine, infrav1.InstanceCreatedCondition,
-			infrav1.InstanceProvisioningFailedReason, clusterv1.ConditionSeverityError,
-			"Failed to create instance: %s", err.Error())
+		conditions.Set(scope.OVHMachine, metav1.Condition{
+			Type:    infrav1.InstanceCreatedCondition,
+			Status:  metav1.ConditionFalse,
+			Reason:  infrav1.InstanceProvisioningFailedReason,
+			Message: "Failed to create instance: " + err.Error(),
+		})
 
 		return ctrl.Result{}, fmt.Errorf("creating OVH instance: %w", err)
 	}
@@ -541,10 +568,17 @@ func (r *OVHMachineReconciler) createInstance(scope *MachineScope) (reconcile.Re
 
 	// Store instance ID in status
 	scope.OVHMachine.Status.InstanceID = instance.ID
-	conditions.MarkTrue(scope.OVHMachine, infrav1.InstanceCreatedCondition)
-	conditions.MarkFalse(scope.OVHMachine, infrav1.InstanceProvisioningReadyCondition,
-		infrav1.InstanceProvisioningInProgressReason, clusterv1.ConditionSeverityInfo,
-		"Instance created, waiting for ACTIVE state")
+	conditions.Set(scope.OVHMachine, metav1.Condition{
+		Type:   infrav1.InstanceCreatedCondition,
+		Status: metav1.ConditionTrue,
+		Reason: infrav1.InstanceCreatedCondition,
+	})
+	conditions.Set(scope.OVHMachine, metav1.Condition{
+		Type:    infrav1.InstanceProvisioningReadyCondition,
+		Status:  metav1.ConditionFalse,
+		Reason:  infrav1.InstanceProvisioningInProgressReason,
+		Message: "Instance created, waiting for ACTIVE state",
+	})
 
 	// Requeue to check for ACTIVE state
 	return ctrl.Result{RequeueAfter: requeueDelayLong}, nil

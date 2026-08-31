@@ -20,7 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 
 const (
 	// OVHConnectionReadyCondition documents the status of the OVH API connection.
-	OVHConnectionReadyCondition clusterv1.ConditionType = "OVHConnectionReady"
+	OVHConnectionReadyCondition string = "OVHConnectionReady"
 	// OVHConnectionFailedReason documents that connection to OVH API failed.
 	OVHConnectionFailedReason = "OVHConnectionFailed"
 	// OVHAuthenticationFailedReason documents that authentication to OVH API failed.
@@ -40,18 +40,18 @@ const (
 	OVHConnectionReadyReason = "OVHConnectionReady"
 
 	// NetworkReadyCondition documents the status of the private network.
-	NetworkReadyCondition clusterv1.ConditionType = "NetworkReady"
+	NetworkReadyCondition string = "NetworkReady"
 	// NetworkCreationFailedReason documents that the private network creation failed.
 	NetworkCreationFailedReason = "NetworkCreationFailed"
 	// NetworkReadyReason documents that the private network is ready.
 	NetworkReadyReason = "NetworkReady"
 	// NetworkCreatedByControllerCondition documents that the network was created by the controller (not pre-existing).
-	NetworkCreatedByControllerCondition clusterv1.ConditionType = "NetworkCreatedByController"
+	NetworkCreatedByControllerCondition string = "NetworkCreatedByController"
 	// NetworkCreatedByControllerReason documents the network was created by the controller.
 	NetworkCreatedByControllerReason = "NetworkCreatedByController"
 
 	// LoadBalancerReadyCondition documents the status of the OVH load balancer.
-	LoadBalancerReadyCondition clusterv1.ConditionType = "LoadBalancerReady"
+	LoadBalancerReadyCondition string = "LoadBalancerReady"
 	// LoadBalancerNotReadyReason documents that the load balancer is not ready.
 	LoadBalancerNotReadyReason = "LoadBalancerNotReady"
 	// LoadBalancerCreationFailedReason documents that load balancer creation failed.
@@ -60,7 +60,7 @@ const (
 	LoadBalancerReadyReason = "LoadBalancerReady"
 
 	// InfrastructureReadyCondition documents that all OVH infrastructure is provisioned.
-	InfrastructureReadyCondition clusterv1.ConditionType = "InfrastructureReady"
+	InfrastructureReadyCondition string = "InfrastructureReady"
 	// InfrastructureProvisioningInProgressReason documents that infrastructure provisioning is in progress.
 	InfrastructureProvisioningInProgressReason = "InfrastructureProvisioningInProgress"
 	// InfrastructureProvisioningFailedReason documents that infrastructure provisioning has failed.
@@ -69,7 +69,7 @@ const (
 	InfrastructureReadyReason = "InfrastructureReady"
 
 	// InitMachineCreatedCondition documents the status of the first control plane machine.
-	InitMachineCreatedCondition clusterv1.ConditionType = "InitMachineCreated"
+	InitMachineCreatedCondition string = "InitMachineCreated"
 	// InitMachineNotYetCreatedReason documents that the first control plane machine is not yet created.
 	InitMachineNotYetCreatedReason = "InitMachineNotYetCreated"
 )
@@ -268,17 +268,16 @@ type OVHClusterStatus struct {
 	// +optional
 	Ready bool `json:"ready,omitempty"`
 
-	// FailureReason is the short name for the reason why a failure might be happening.
+	// Initialization tracks provisioning state per the CAPI v1beta2 contract.
+	// status.initialization.provisioned is read by the core Cluster controller
+	// to set Cluster.status.initialization.infrastructureProvisioned; it
+	// replaces the deprecated status.ready as the contract signal.
 	// +optional
-	FailureReason string `json:"failureReason,omitempty"`
-
-	// FailureMessage is a full error message dump of the above failureReason.
-	// +optional
-	FailureMessage string `json:"failureMessage,omitempty"`
+	Initialization Initialization `json:"initialization,omitempty"`
 
 	// Conditions defines current service state of the OVH cluster.
 	// +optional
-	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// NetworkID is the ID of the private network being used.
 	// +optional
@@ -329,7 +328,7 @@ type OVHClusterStatus struct {
 
 	// FailureDomains reports the availability zones discovered in the region.
 	// +optional
-	FailureDomains clusterv1.FailureDomains `json:"failureDomains,omitempty"`
+	FailureDomains []clusterv1.FailureDomain `json:"failureDomains,omitempty"`
 
 	// SecurityGroupIDs maps security group names to their OVH IDs.
 	// +optional
@@ -371,11 +370,11 @@ func init() {
 }
 
 // GetConditions returns the set of conditions for this object.
-func (c *OVHCluster) GetConditions() clusterv1.Conditions {
+func (c *OVHCluster) GetConditions() []metav1.Condition {
 	return c.Status.Conditions
 }
 
 // SetConditions sets the conditions on this object.
-func (c *OVHCluster) SetConditions(conditions clusterv1.Conditions) {
+func (c *OVHCluster) SetConditions(conditions []metav1.Condition) {
 	c.Status.Conditions = conditions
 }

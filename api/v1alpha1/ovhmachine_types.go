@@ -19,7 +19,7 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
+	clusterv1 "sigs.k8s.io/cluster-api/api/core/v1beta2"
 )
 
 const (
@@ -30,12 +30,12 @@ const (
 
 const (
 	// InstanceCreatedCondition documents that the OVH instance has been created.
-	InstanceCreatedCondition clusterv1.ConditionType = "InstanceCreated"
+	InstanceCreatedCondition string = "InstanceCreated"
 	// InstanceNotFoundReason documents that the instance was not found.
 	InstanceNotFoundReason = "InstanceNotFound"
 
 	// InstanceProvisioningReadyCondition documents instance creation and provisioning status.
-	InstanceProvisioningReadyCondition clusterv1.ConditionType = "InstanceProvisioningReady"
+	InstanceProvisioningReadyCondition string = "InstanceProvisioningReady"
 	// InstanceProvisioningInProgressReason documents that instance provisioning is in progress (BUILD state).
 	InstanceProvisioningInProgressReason = "InstanceProvisioningInProgress"
 	// InstanceProvisioningFailedReason documents that instance provisioning has failed (ERROR state).
@@ -44,7 +44,7 @@ const (
 	InstanceProvisioningReadyReason = "InstanceProvisioningReady"
 
 	// InstanceRunningCondition documents whether the instance is running.
-	InstanceRunningCondition clusterv1.ConditionType = "InstanceRunning"
+	InstanceRunningCondition string = "InstanceRunning"
 	// InstanceRunningReason documents that the instance is running (ACTIVE).
 	InstanceRunningReason = "InstanceRunning"
 	// InstanceNotRunningReason documents that the instance is not yet running.
@@ -108,7 +108,7 @@ type OVHMachineStatus struct {
 
 	// Conditions defines current service state of the OVH machine.
 	// +optional
-	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// FailureReason is the short name for the reason why a failure might be happening.
 	// +optional
@@ -172,11 +172,11 @@ func init() {
 }
 
 // GetConditions returns the set of conditions for this object.
-func (m *OVHMachine) GetConditions() clusterv1.Conditions {
+func (m *OVHMachine) GetConditions() []metav1.Condition {
 	return m.Status.Conditions
 }
 
 // SetConditions sets the conditions on this object.
-func (m *OVHMachine) SetConditions(conditions clusterv1.Conditions) {
+func (m *OVHMachine) SetConditions(conditions []metav1.Condition) {
 	m.Status.Conditions = conditions
 }

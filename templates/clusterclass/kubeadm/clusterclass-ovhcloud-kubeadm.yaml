@@ -5,60 +5,59 @@
 #
 # Then create clusters via topology referencing class: ovhcloud-kubeadm.
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: ClusterClass
 metadata:
   name: ovhcloud-kubeadm
 spec:
   controlPlane:
-    ref:
-      apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    templateRef:
+      apiVersion: controlplane.cluster.x-k8s.io/v1beta2
       kind: KubeadmControlPlaneTemplate
       name: ovhcloud-kubeadm-control-plane
     machineInfrastructure:
-      ref:
+      templateRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
         kind: OVHMachineTemplate
         name: ovhcloud-kubeadm-control-plane
-    machineHealthCheck:
-      maxUnhealthy: "34%"
-      nodeStartupTimeout: 20m
-      unhealthyConditions:
-        - type: Ready
-          status: "False"
-          timeout: 5m
-        - type: Ready
-          status: Unknown
-          timeout: 5m
+    healthCheck:
+      checks:
+        nodeStartupTimeoutSeconds: 1200
+        unhealthyNodeConditions:
+          - type: Ready
+            status: "False"
+            timeoutSeconds: 300
+          - type: Ready
+            status: Unknown
+            timeoutSeconds: 300
   infrastructure:
-    ref:
+    templateRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
       kind: OVHClusterTemplate
       name: ovhcloud-kubeadm-cluster
   workers:
     machineDeployments:
       - class: default-worker
-        template:
-          bootstrap:
-            ref:
-              apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-              kind: KubeadmConfigTemplate
-              name: ovhcloud-kubeadm-worker
-          infrastructure:
-            ref:
-              apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
-              kind: OVHMachineTemplate
-              name: ovhcloud-kubeadm-worker
-        machineHealthCheck:
-          maxUnhealthy: "34%"
-          nodeStartupTimeout: 20m
-          unhealthyConditions:
-            - type: Ready
-              status: "False"
-              timeout: 5m
-            - type: Ready
-              status: Unknown
-              timeout: 5m
+        bootstrap:
+          templateRef:
+            apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+            kind: KubeadmConfigTemplate
+            name: ovhcloud-kubeadm-worker
+        infrastructure:
+          templateRef:
+            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+            kind: OVHMachineTemplate
+            name: ovhcloud-kubeadm-worker
+        healthCheck:
+          checks:
+            nodeStartupTimeoutSeconds: 1200
+            unhealthyNodeConditions:
+              - type: Ready
+                status: "False"
+                timeoutSeconds: 300
+              - type: Ready
+                status: Unknown
+                timeoutSeconds: 300
 
   variables:
     - name: serviceName
@@ -270,7 +269,7 @@ spec:
       imageName: PLACEHOLDER
       sshKeyName: PLACEHOLDER
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: KubeadmControlPlaneTemplate
 metadata:
   name: ovhcloud-kubeadm-control-plane
@@ -309,7 +308,7 @@ spec:
               echo "KUBELET_EXTRA_ARGS=--provider-id=ovhcloud://${REGION}/${UUID}" > /etc/default/kubelet
             fi
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfigTemplate
 metadata:
   name: ovhcloud-kubeadm-worker

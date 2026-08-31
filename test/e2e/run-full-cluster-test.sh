@@ -31,7 +31,7 @@ CLUSTER_NAME="${1:-capitest-$(date +%s)}"
 NAMESPACE="fleet-default"
 K8S_VERSION="${K8S_VERSION:-v1.31.4+rke2r1}"
 
-TIMEOUT_CLUSTER_READY=1800 # 30 min — OVH LB provisioning is highly variable
+TIMEOUT_CLUSTER_READY=1800 # 30 min, OVH LB provisioning is highly variable
                             # (observed 2 min on a good day, 14+ min when slow,
                             # plus the actual RKE2 install time on the CP node).
 TIMEOUT_NODES_READY=600    # 10 min after CP ready
@@ -52,15 +52,16 @@ kubectl -n "$NAMESPACE" create secret generic ovh-credentials \
 # ---- Step 2: apply Cluster manifest ----
 log_info "Applying Cluster $CLUSTER_NAME"
 cat <<EOF | kubectl apply -f -
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   name: ${CLUSTER_NAME}
   namespace: ${NAMESPACE}
 spec:
   topology:
-    class: ovhcloud-rke2
-    classNamespace: ${NAMESPACE}
+    classRef:
+      name: ovhcloud-rke2
+      namespace: ${NAMESPACE}
     version: ${K8S_VERSION}
     controlPlane:
       replicas: 1
@@ -100,7 +101,7 @@ last_log=$start
 # Disable -e/-pipefail inside the polling loop. Transient kubectl/apiserver
 # blips (RKE2 supervisor restart, etcd leader rotation, secret not yet
 # materialized, kube-apiserver TLS handshake EOF on a freshly-booting CP)
-# must not abort the whole test — keep polling until success or timeout.
+# must not abort the whole test, keep polling until success or timeout.
 set +eo pipefail
 
 while true; do
@@ -159,7 +160,7 @@ fi
 log_info "Deleting Cluster $CLUSTER_NAME"
 kubectl -n "$NAMESPACE" delete cluster "$CLUSTER_NAME" --wait=false >/dev/null 2>&1 || true
 
-# Wait for all CRs to be gone — same hardening as the readiness loop:
+# Wait for all CRs to be gone, same hardening as the readiness loop:
 # transient kubectl errors must not abort the whole test.
 del_start=$(date +%s)
 last_remaining=""
@@ -198,7 +199,7 @@ set -eo pipefail
 # Count only resources that are still genuinely live. OVH's FIP reaper is
 # async: once we issue DeleteFloatingIP and the FIP transitions to
 # status=down/associatedEntity=null, OVH lists it for a few more minutes
-# before truly dropping it — that is not a leak from the controller's POV.
+# before truly dropping it, that is not a leak from the controller's POV.
 inst_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/instance" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
 lb_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/region/${OVH_REGION}/loadbalancing/loadbalancer" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")
 net_count=$(ovh_get "/cloud/project/${OVH_SERVICE_NAME}/network/private" | python3 -c "import json,sys; print(len(json.load(sys.stdin)))")

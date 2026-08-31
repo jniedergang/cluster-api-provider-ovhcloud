@@ -4,63 +4,62 @@
 #   kubectl apply -f clusterclass-ovhcloud-rke2.yaml
 #
 # Then create clusters in ~30 lines of YAML by referencing
-# spec.topology.class: ovhcloud-rke2 — see the cluster-template-rke2-clusterclass.yaml
+# spec.topology.classRef.name: ovhcloud-rke2, see the cluster-template-rke2-clusterclass.yaml
 # example for full topology-based usage.
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: ClusterClass
 metadata:
   name: ovhcloud-rke2
 spec:
   controlPlane:
-    ref:
-      apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    templateRef:
+      apiVersion: controlplane.cluster.x-k8s.io/v1beta2
       kind: RKE2ControlPlaneTemplate
       name: ovhcloud-rke2-control-plane
     machineInfrastructure:
-      ref:
+      templateRef:
         apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
         kind: OVHMachineTemplate
         name: ovhcloud-rke2-control-plane
-    machineHealthCheck:
-      maxUnhealthy: "34%"
-      nodeStartupTimeout: 20m
-      unhealthyConditions:
-        - type: Ready
-          status: "False"
-          timeout: 5m
-        - type: Ready
-          status: Unknown
-          timeout: 5m
+    healthCheck:
+      checks:
+        nodeStartupTimeoutSeconds: 1200
+        unhealthyNodeConditions:
+          - type: Ready
+            status: "False"
+            timeoutSeconds: 300
+          - type: Ready
+            status: Unknown
+            timeoutSeconds: 300
   infrastructure:
-    ref:
+    templateRef:
       apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
       kind: OVHClusterTemplate
       name: ovhcloud-rke2-cluster
   workers:
     machineDeployments:
       - class: default-worker
-        template:
-          bootstrap:
-            ref:
-              apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
-              kind: RKE2ConfigTemplate
-              name: ovhcloud-rke2-worker
-          infrastructure:
-            ref:
-              apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
-              kind: OVHMachineTemplate
-              name: ovhcloud-rke2-worker
-        machineHealthCheck:
-          maxUnhealthy: "34%"
-          nodeStartupTimeout: 20m
-          unhealthyConditions:
-            - type: Ready
-              status: "False"
-              timeout: 5m
-            - type: Ready
-              status: Unknown
-              timeout: 5m
+        bootstrap:
+          templateRef:
+            apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
+            kind: RKE2ConfigTemplate
+            name: ovhcloud-rke2-worker
+        infrastructure:
+          templateRef:
+            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+            kind: OVHMachineTemplate
+            name: ovhcloud-rke2-worker
+        healthCheck:
+          checks:
+            nodeStartupTimeoutSeconds: 1200
+            unhealthyNodeConditions:
+              - type: Ready
+                status: "False"
+                timeoutSeconds: 300
+              - type: Ready
+                status: Unknown
+                timeoutSeconds: 300
 
   # --- Variables exposed to the Cluster ---
   variables:
@@ -155,7 +154,7 @@ spec:
             "cacerts" (Settings > cacerts in the UI). When non-empty, a
             ConfigMap cattle-system/serverca is auto-created on the
             workload cluster. The agent deployment still needs a one-time
-            patch to mount it — see scripts/import-to-rancher.sh.
+            patch to mount it, see scripts/import-to-rancher.sh.
     - name: disableCloudController
       required: false
       schema:
@@ -215,7 +214,7 @@ spec:
 
   # --- Patches that wire variables into the templates ---
   #
-  # Cluster autoscaler: NOT a ClusterClass variable — set directly on the
+  # Cluster autoscaler: NOT a ClusterClass variable, set directly on the
   # Cluster topology's worker MachineDeployment metadata:
   #   spec.topology.workers.machineDeployments[0].metadata.annotations:
   #     cluster.x-k8s.io/cluster-api-autoscaler-node-group-min-size: "1"
@@ -319,7 +318,7 @@ spec:
     - name: cp-region-file
       definitions:
         - selector:
-            apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+            apiVersion: controlplane.cluster.x-k8s.io/v1beta2
             kind: RKE2ControlPlaneTemplate
             matchResources:
               controlPlane: true
@@ -348,7 +347,7 @@ spec:
     - name: worker-region-file
       definitions:
         - selector:
-            apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+            apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
             kind: RKE2ConfigTemplate
             matchResources:
               machineDeploymentClass:
@@ -402,14 +401,16 @@ spec:
       imageName: PLACEHOLDER
       sshKeyName: PLACEHOLDER
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: RKE2ControlPlaneTemplate
 metadata:
   name: ovhcloud-rke2-control-plane
 spec:
   template:
     spec:
-      version: ""  # set by Cluster.spec.topology.version
+      # version is NOT set here: the topology injects it from
+      # Cluster.spec.topology.version (the v1beta2 RKE2ControlPlaneTemplate
+      # resource spec has no version field).
       serverConfig:
         cni: calico
       rolloutStrategy:
@@ -466,13 +467,8 @@ spec:
             - "provider-id=ovhcloud://${REGION}/${UUID}"
           EOF
           fi
-      machineTemplate:
-        infrastructureRef:
-          apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
-          kind: OVHMachineTemplate
-          name: ovhcloud-rke2-control-plane
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: RKE2ConfigTemplate
 metadata:
   name: ovhcloud-rke2-worker

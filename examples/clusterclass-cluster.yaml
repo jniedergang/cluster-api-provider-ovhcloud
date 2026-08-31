@@ -6,14 +6,15 @@
 # This file is what users typically write to provision a cluster:
 # ~30 lines of YAML referencing the pre-installed ClusterClass.
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   namespace: demo
   name: my-topology-cluster
 spec:
   topology:
-    class: ovhcloud-rke2
+    classRef:
+      name: ovhcloud-rke2
     version: v1.31.0+rke2r1
     controlPlane:
       replicas: 3

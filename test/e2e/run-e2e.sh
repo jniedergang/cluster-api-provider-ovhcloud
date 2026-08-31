@@ -76,7 +76,7 @@ precondition_checks() {
   log_ok "kubectl reaches management cluster"
 
   if ! kubectl get crd ovhclusters.infrastructure.cluster.x-k8s.io >/dev/null 2>&1; then
-    log_fail "OVHCluster CRD missing — install CAPIOVH first"
+    log_fail "OVHCluster CRD missing, install CAPIOVH first"
     exit 2
   fi
   log_ok "CAPIOVH CRDs installed"
@@ -134,7 +134,7 @@ test_webhook() {
   setup_namespace
   trap teardown_namespace RETURN
 
-  log_info "Applying invalid OVHCluster (no subnetID, no networkConfig) — should be rejected"
+  log_info "Applying invalid OVHCluster (no subnetID, no networkConfig), should be rejected"
   output=$(apply_yaml "$(cat <<EOF
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: OVHCluster
@@ -156,7 +156,7 @@ EOF
     fail_test "webhook did not reject invalid OVHCluster (or wrong message): $output"
   fi
 
-  log_info "Applying valid OVHCluster — should be accepted"
+  log_info "Applying valid OVHCluster, should be accepted"
   output=$(apply_yaml "$(cat <<EOF
 apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
 kind: OVHCluster
@@ -227,6 +227,26 @@ EOF
   else
     fail_test "OVHCluster did not reach Ready within ${TIMEOUT_LB_ACTIVE}s"
     return
+  fi
+
+  # v1beta2 contract proof. The infra provider must report
+  # status.initialization.provisioned (Phase A field), and the core Cluster
+  # controller must read it via the v1beta2 contract label (Phase B flip) into
+  # Cluster.status.initialization.infrastructureProvisioned. A wrong or missing
+  # contract label would leave infrastructureProvisioned unset even though the
+  # OVHCluster itself reconciled to Ready.
+  prov=$(kubectl -n "$NAMESPACE" get ovhcluster "$CLUSTER_NAME" -o jsonpath='{.status.initialization.provisioned}')
+  if [ "$prov" = "true" ]; then
+    pass_test "OVHCluster.status.initialization.provisioned=true (v1beta2 field present)"
+  else
+    fail_test "OVHCluster.status.initialization.provisioned not true (got '${prov}')"
+  fi
+
+  if wait_for_condition "Cluster infrastructureProvisioned" 120 \
+    "kubectl -n ${NAMESPACE} get cluster ${CLUSTER_NAME} -o jsonpath='{.status.initialization.infrastructureProvisioned}' | grep -q true"; then
+    pass_test "Cluster.status.initialization.infrastructureProvisioned=true (v1beta2 contract resolved)"
+  else
+    fail_test "core Cluster never read the v1beta2 contract (infrastructureProvisioned not true)"
   fi
 
   # Verify resources exist in OVH

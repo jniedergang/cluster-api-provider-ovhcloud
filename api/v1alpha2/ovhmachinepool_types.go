@@ -18,8 +18,6 @@ package v1alpha2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 // OVHMachinePoolSpec defines the desired state of OVHMachinePool.
@@ -60,7 +58,7 @@ type OVHMachinePoolStatus struct {
 
 	// Conditions defines current service state of the pool.
 	// +optional
-	Conditions clusterv1.Conditions `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
 	// FailureReason is the short name for a failure.
 	// +optional
@@ -109,11 +107,11 @@ func init() {
 }
 
 // GetConditions returns the set of conditions for this object.
-func (m *OVHMachinePool) GetConditions() clusterv1.Conditions {
+func (m *OVHMachinePool) GetConditions() []metav1.Condition {
 	return m.Status.Conditions
 }
 
 // SetConditions sets the conditions on this object.
-func (m *OVHMachinePool) SetConditions(conditions clusterv1.Conditions) {
+func (m *OVHMachinePool) SetConditions(conditions []metav1.Condition) {
 	m.Status.Conditions = conditions
 }
