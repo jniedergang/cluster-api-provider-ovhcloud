@@ -6,9 +6,9 @@ resources:
 # NOTE: bases/...ovhmachinepools.yaml is intentionally omitted. OVHMachinePool
 # has a single v1alpha2 version and no conversion webhook (no controller yet),
 # so it lacks the spec.conversion + cert-manager annotations that config/default's
-# replacements inject into every CRD — adding it makes `kustomize build
+# replacements inject into every CRD, adding it makes `kustomize build
 # config/default` fail. Re-add it together with the MachinePool controller+webhook.
-# (The Helm chart currently over-ships this CRD; reconcile separately.)
+# (The Helm chart also excludes it: `make crds-sync` skips ovhmachinepools.)
 
 patches:
 - path: patches/webhook_in_ovhclusters.yaml
