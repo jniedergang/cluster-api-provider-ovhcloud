@@ -7,7 +7,7 @@
 #   KUBERNETES_VERSION         (required, e.g. v1.31.0)
 #   CONTROL_PLANE_MACHINE_COUNT (default 3)
 #   WORKER_MACHINE_COUNT       (default 2)
-#   POD_CIDR                   (default 192.168.0.0/16 — Calico default)
+#   POD_CIDR                   (default 192.168.0.0/16, Calico default)
 #   SERVICE_CIDR               (default 10.96.0.0/12)
 #   OVH_SERVICE_NAME           (required, OVH Public Cloud project ID)
 #   OVH_REGION                 (required, e.g. EU-WEST-PAR)
@@ -23,7 +23,7 @@ kind: Namespace
 metadata:
   name: ${NAMESPACE}
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   namespace: ${NAMESPACE}
@@ -38,11 +38,11 @@ spec:
       - ${SERVICE_CIDR:=10.96.0.0/12}
     serviceDomain: cluster.local
   controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    apiGroup: controlplane.cluster.x-k8s.io
     kind: KubeadmControlPlane
     name: ${CLUSTER_NAME}-control-plane
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+    apiGroup: infrastructure.cluster.x-k8s.io
     kind: OVHCluster
     name: ${CLUSTER_NAME}
 ---
@@ -63,7 +63,7 @@ spec:
     subnetCIDR: ${OVH_SUBNET_CIDR:=10.42.0.0/24}
   sshKeyName: ${OVH_SSH_KEY}
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: KubeadmControlPlane
 metadata:
   namespace: ${NAMESPACE}
@@ -72,11 +72,11 @@ spec:
   replicas: ${CONTROL_PLANE_MACHINE_COUNT:=3}
   version: ${KUBERNETES_VERSION}
   machineTemplate:
-    infrastructureRef:
-      apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
-      kind: OVHMachineTemplate
-      name: ${CLUSTER_NAME}-cp
-      namespace: ${NAMESPACE}
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OVHMachineTemplate
+        name: ${CLUSTER_NAME}-cp
   kubeadmConfigSpec:
     initConfiguration:
       nodeRegistration:
@@ -87,7 +87,7 @@ spec:
         kubeletExtraArgs:
           cloud-provider: external
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: KubeadmConfigTemplate
 metadata:
   namespace: ${NAMESPACE}
@@ -100,7 +100,7 @@ spec:
           kubeletExtraArgs:
             cloud-provider: external
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineDeployment
 metadata:
   namespace: ${NAMESPACE}
@@ -117,11 +117,11 @@ spec:
       version: ${KUBERNETES_VERSION}
       bootstrap:
         configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          apiGroup: bootstrap.cluster.x-k8s.io
           kind: KubeadmConfigTemplate
           name: ${CLUSTER_NAME}-worker
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
+        apiGroup: infrastructure.cluster.x-k8s.io
         kind: OVHMachineTemplate
         name: ${CLUSTER_NAME}-worker
 ---
@@ -149,22 +149,22 @@ spec:
       imageName: ${OVH_IMAGE:=Ubuntu 22.04}
       sshKeyName: ${OVH_SSH_KEY}
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineHealthCheck
 metadata:
   namespace: ${NAMESPACE}
   name: ${CLUSTER_NAME}-mhc
 spec:
   clusterName: ${CLUSTER_NAME}
-  maxUnhealthy: 34%
-  nodeStartupTimeout: 20m
   selector:
     matchLabels:
       cluster.x-k8s.io/cluster-name: ${CLUSTER_NAME}
-  unhealthyConditions:
-  - type: Ready
-    status: "False"
-    timeout: 5m
-  - type: Ready
-    status: Unknown
-    timeout: 5m
+  checks:
+    nodeStartupTimeoutSeconds: 1200
+    unhealthyNodeConditions:
+    - type: Ready
+      status: "False"
+      timeoutSeconds: 300
+    - type: Ready
+      status: Unknown
+      timeoutSeconds: 300

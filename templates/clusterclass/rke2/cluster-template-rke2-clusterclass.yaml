@@ -24,14 +24,15 @@ kind: Namespace
 metadata:
   name: ${NAMESPACE}
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   namespace: ${NAMESPACE}
   name: ${CLUSTER_NAME}
 spec:
   topology:
-    class: ovhcloud-rke2
+    classRef:
+      name: ovhcloud-rke2
     version: ${KUBERNETES_VERSION}+rke2r1
     controlPlane:
       replicas: ${CONTROL_PLANE_MACHINE_COUNT:=3}

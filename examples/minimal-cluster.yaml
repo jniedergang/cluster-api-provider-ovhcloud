@@ -25,22 +25,22 @@ stringData:
   applicationSecret: REPLACE_ME
   consumerKey: REPLACE_ME
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: Cluster
 metadata:
   namespace: demo
   name: minimal
 spec:
   controlPlaneRef:
-    apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+    apiGroup: controlplane.cluster.x-k8s.io
     kind: RKE2ControlPlane
     name: minimal-cp
   infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+    apiGroup: infrastructure.cluster.x-k8s.io
     kind: OVHCluster
     name: minimal
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHCluster
 metadata:
   namespace: demo
@@ -57,24 +57,24 @@ spec:
     subnetCIDR: "10.42.0.0/24"
   sshKeyName: my-ssh-key
 ---
-apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
 kind: RKE2ControlPlane
 metadata:
   namespace: demo
   name: minimal-cp
 spec:
   replicas: 1
-  agentConfig:
-    version: v1.31.0+rke2r1
+  version: v1.31.0+rke2r1
   serverConfig:
     cni: calico
-  infrastructureRef:
-    apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
-    kind: OVHMachineTemplate
-    name: minimal-cp
-    namespace: demo
+  machineTemplate:
+    spec:
+      infrastructureRef:
+        apiGroup: infrastructure.cluster.x-k8s.io
+        kind: OVHMachineTemplate
+        name: minimal-cp
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   namespace: demo
@@ -86,7 +86,7 @@ spec:
       imageName: "Ubuntu 22.04"
       sshKeyName: my-ssh-key
 ---
-apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta2
 kind: RKE2ConfigTemplate
 metadata:
   namespace: demo
@@ -96,7 +96,7 @@ spec:
     spec:
       agentConfig: {}
 ---
-apiVersion: cluster.x-k8s.io/v1beta1
+apiVersion: cluster.x-k8s.io/v1beta2
 kind: MachineDeployment
 metadata:
   namespace: demo
@@ -113,15 +113,15 @@ spec:
       version: v1.31.0
       bootstrap:
         configRef:
-          apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+          apiGroup: bootstrap.cluster.x-k8s.io
           kind: RKE2ConfigTemplate
           name: minimal-worker
       infrastructureRef:
-        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        apiGroup: infrastructure.cluster.x-k8s.io
         kind: OVHMachineTemplate
         name: minimal-worker
 ---
-apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+apiVersion: infrastructure.cluster.x-k8s.io/v1alpha2
 kind: OVHMachineTemplate
 metadata:
   namespace: demo
